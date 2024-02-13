@@ -1,5 +1,5 @@
-github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240213043525-82bc554b024e h1:4JLG9FSywRxaUi8c1wuefaYONpeuYM/IpKLH2S3EbEc=
-github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240213043525-82bc554b024e/go.mod h1:jN9qfsBwxfLdhUbwSIFbM+izWRtPz0kbYyf3/197PH8=
+github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240213050937-27e0ee44149e h1:62QDhCvRRyGUb8AM1jMzprNomC4RZU3cEjMvLaWzXRw=
+github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240213050937-27e0ee44149e/go.mod h1:jN9qfsBwxfLdhUbwSIFbM+izWRtPz0kbYyf3/197PH8=
 github.com/adrg/xdg v0.4.0 h1:RzRqFcjH4nE5C6oTAxhBtoE2IRyjBSa62SCbyPidvls=
 github.com/adrg/xdg v0.4.0/go.mod h1:N6ag73EX4wyxeaoeHctc1mas01KZgsj5tYiAIwqJE/E=
 github.com/avast/retry-go/v4 v4.5.1 h1:AxIx0HGi4VZ3I02jr78j5lZ3M6x1E0Ivxa6b0pUUh7o=
