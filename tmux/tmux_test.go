@@ -149,10 +149,12 @@ func RunInTTY(t *testing.T, cmd *exec.Command) *os.File {
 		}
 	})
 
+	t.Log(os.Environ())
 	var stdout, stderr bytes.Buffer
 	cmd.Stdin = tty
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	cmd.Env = append(cmd.Env, "TERM=xterm-256color")
 
 	t.Logf("Running command in tty %s: %v", tty.Name(), cmd)
 	if err := cmd.Start(); err != nil {
