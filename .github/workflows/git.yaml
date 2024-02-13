@@ -1,4 +1,4 @@
-name: api
+name: git
 
 on:
   pull_request:

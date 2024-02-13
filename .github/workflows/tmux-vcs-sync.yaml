@@ -1,4 +1,4 @@
-name: api
+name: tmux-vcs-sync
 
 on:
   pull_request:
