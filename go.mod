@@ -3,7 +3,7 @@ module github.com/JeffFaer/tmux-vcs-sync
 go 1.22.0
 
 require (
-	github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240213043525-82bc554b024e
+	github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240213050937-27e0ee44149e
 	github.com/adrg/xdg v0.4.0
 	github.com/avast/retry-go/v4 v4.5.1
 	github.com/creack/pty v1.1.21
