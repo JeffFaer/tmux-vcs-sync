@@ -124,8 +124,12 @@ func (srv *Server) Equal(other *Server) bool {
 // ListSessions lists the sessions that exist in this tmux server.
 // This method will also lookup and cache the given properties.
 func (srv *Server) ListSessions() ([]*Session, error) {
-	stdout, err := srv.command("list-sessions", "-F", string(SessionID)).RunStdout()
+	stdout, stderr, err := srv.command("list-sessions", "-F", string(SessionID)).RunOutput()
 	if err != nil {
+		if strings.Contains(stderr, "no server running") {
+			return nil, nil
+		}
+		fmt.Fprint(os.Stderr, stderr)
 		return nil, err
 	}
 	var res []*Session
