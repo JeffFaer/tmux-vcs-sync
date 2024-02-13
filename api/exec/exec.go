@@ -75,7 +75,7 @@ func (cmd *Command) Start() error {
 	start := time.Now()
 	logger := slog.Default().With("command", cmd)
 	logger.Debug("Executing external process. (1/2)")
-	err := cmd.Start()
+	err := cmd.cmd.Start()
 	go func() {
 		cmd.Wait()
 		logger.Debug("Executing external process. (2/2)", "elapsed", time.Since(start), "exit_code", cmd.ProcessState.ExitCode())

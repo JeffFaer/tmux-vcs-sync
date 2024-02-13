@@ -166,11 +166,17 @@ func RunInTTY(t *testing.T, cmd *exec.Command) *os.File {
 
 func TestServer_Sessions(t *testing.T) {
 	srv := NewServerForTesting(t)
+
+	sessions := srv.MustListSessions()
+	if len(sessions) != 0 {
+		t.Errorf("New tmux server has %d sessions, expected 0", len(sessions))
+	}
+
 	a := srv.MustNewSession(NewSessionName("a"))
 	b := srv.MustNewSession(NewSessionName("b"))
 	c := srv.MustNewSession(NewSessionName("c"))
 
-	sessions := srv.MustListSessions()
+	sessions = srv.MustListSessions()
 	if diff := cmp.Diff([]TestSession{a, b, c}, sessions, tmuxCmpOpt); diff != "" {
 		t.Errorf("srv.ListSessions() diff (-want +got)\n%s", diff)
 	}
