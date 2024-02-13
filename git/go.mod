@@ -2,7 +2,7 @@ module github.com/JeffFaer/tmux-vcs-sync/git
 
 go 1.22.0
 
-require github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240213035814-b9c15abe708f
+require github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240213043525-82bc554b024e
 
 require (
 	github.com/adrg/xdg v0.4.0 // indirect

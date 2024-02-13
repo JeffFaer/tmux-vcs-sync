@@ -1,5 +1,5 @@
-github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240213035814-b9c15abe708f h1:4KPBcNkp63wZkYFlg7EqYI/+bZhxGBkQOHHiStumtLs=
-github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240213035814-b9c15abe708f/go.mod h1:U2RDKn0hkBgJGAHZSYWqvnhZwG6WIkiTEEiD3znjKFY=
+github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240213043525-82bc554b024e h1:4JLG9FSywRxaUi8c1wuefaYONpeuYM/IpKLH2S3EbEc=
+github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240213043525-82bc554b024e/go.mod h1:jN9qfsBwxfLdhUbwSIFbM+izWRtPz0kbYyf3/197PH8=
 github.com/adrg/xdg v0.4.0 h1:RzRqFcjH4nE5C6oTAxhBtoE2IRyjBSa62SCbyPidvls=
 github.com/adrg/xdg v0.4.0/go.mod h1:N6ag73EX4wyxeaoeHctc1mas01KZgsj5tYiAIwqJE/E=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
