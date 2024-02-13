@@ -3,9 +3,11 @@ package git
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/JeffFaer/tmux-vcs-sync/api"
 	"github.com/JeffFaer/tmux-vcs-sync/api/exec"
@@ -67,8 +69,12 @@ var urlRegexes = []*regexp.Regexp{
 }
 
 func (git git) parseOriginURL(root string) (string, bool) {
-	url, err := git.Command("-C", root, "remote", "get-url", "origin").RunStdout()
+	url, stderr, err := git.Command("-C", root, "remote", "get-url", "origin").RunOutput()
 	if err != nil {
+		if strings.Contains(stderr, "No such remote") {
+			return "", false
+		}
+		fmt.Fprint(os.Stderr, stderr)
 		return "", false
 	}
 	for _, regex := range urlRegexes {
