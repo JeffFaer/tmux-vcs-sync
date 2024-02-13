@@ -1,7 +1,6 @@
 package tmux
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -149,12 +148,12 @@ func RunInTTY(t *testing.T, cmd *exec.Command) *os.File {
 		}
 	})
 
-	t.Log(os.Environ())
-	var stdout, stderr bytes.Buffer
 	cmd.Stdin = tty
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	cmd.Env = append(cmd.Env, "TERM=xterm-256color")
+	cmd.Stdout = tty
+	cmd.Stderr = tty
+	// tmux needs TERM to be set, and it isn't inherited from the parent process
+	// in GitHub Actions.
+	cmd.Env = append(cmd.Environ(), "TERM=xterm-256color")
 
 	t.Logf("Running command in tty %s: %v", tty.Name(), cmd)
 	if err := cmd.Start(); err != nil {
@@ -162,7 +161,7 @@ func RunInTTY(t *testing.T, cmd *exec.Command) *os.File {
 	}
 	t.Cleanup(func() {
 		if err := cmd.Process.Kill(); err != nil {
-			t.Logf("Could not kill process %d: %v\n\nstdout\n%s\n\nstderr\n%s", cmd.Process.Pid, err, string(stdout.Bytes()), string(stderr.Bytes()))
+			t.Logf("Could not kill process %d: %v", cmd.Process.Pid, err)
 		}
 	})
 	return pty
