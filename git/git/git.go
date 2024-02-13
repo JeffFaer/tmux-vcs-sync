@@ -55,6 +55,7 @@ func (git git) rootDir(cwd string) (string, error) {
 
 func (git git) repoName(root string) string {
 	for _, strat := range []func() (string, bool){
+		func() (string, bool) { return git.checkExplicitRepoName(root) },
 		func() (string, bool) { return git.parseOriginURL(root) },
 	} {
 		if n, ok := strat(); ok {
@@ -66,6 +67,18 @@ func (git git) repoName(root string) string {
 
 var urlRegexes = []*regexp.Regexp{
 	regexp.MustCompile("^git@github.com:[^/]+/(.+).git$"),
+}
+
+func (git git) checkExplicitRepoName(root string) (string, bool) {
+	n, stderr, err := git.Command("-C", root, "config", "tmux-vcs-sync.name").RunOutput()
+	if err != nil {
+		if len(stderr) == 0 {
+			return "", false
+		}
+		fmt.Fprint(os.Stderr, stderr)
+		return "", false
+	}
+	return n, true
 }
 
 func (git git) parseOriginURL(root string) (string, bool) {
