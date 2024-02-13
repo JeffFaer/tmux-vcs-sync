@@ -158,7 +158,7 @@ func RunInTTY(t *testing.T, cmd *exec.Command) *os.File {
 	}
 	t.Cleanup(func() {
 		if err := cmd.Process.Kill(); err != nil {
-			t.Logf("Could not kill process %v", cmd.Process)
+			t.Logf("Could not kill process %d: %v", cmd.Process.Pid, err)
 		}
 	})
 	return pty
@@ -213,9 +213,8 @@ func TestServer_AttachOrSwitch(t *testing.T) {
 		return nil
 	}, retry.Delay(10*time.Millisecond), retry.Context(ctx))
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-
 	if id := client.MustProperties(ClientProperty(SessionID))[ClientProperty(SessionID)]; id != a.ID {
 		t.Errorf("Client is connected to %q, expected %q", id, a.ID)
 	}
