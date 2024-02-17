@@ -16,6 +16,11 @@ jobs:
         with:
           go-version: 1.22
       -
+        name: Set up Go workspace
+        run: |
+          go work init
+          go work use . api git
+      -
         name: Run Mage
         uses: magefile/mage-action@v3
         with:
