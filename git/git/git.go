@@ -14,27 +14,30 @@ import (
 )
 
 func init() {
-	exe, err := exec.Lookup("git")
+	var err error
+	git.Executable, err = exec.Lookup("git")
 	if err != nil {
 		slog.Warn("Could not find git.", "error", err)
 	} else {
-		api.Register(git{exe})
+		api.Register(git)
 	}
 }
 
-type git struct {
+var git gitCmd
+
+type gitCmd struct {
 	exec.Executable
 }
 
-func (git) Name() string {
+func (gitCmd) Name() string {
 	return "git"
 }
 
-func (git) WorkUnitName() string {
+func (gitCmd) WorkUnitName() string {
 	return "branch"
 }
 
-func (git git) Repository(dir string) (api.Repository, error) {
+func (git gitCmd) Repository(dir string) (api.Repository, error) {
 	cmd := git.Command("-C", dir, "ls-files", "--error-unmatch")
 	cmd.Stdout = nil
 	cmd.Stderr = nil
@@ -49,11 +52,11 @@ func (git git) Repository(dir string) (api.Repository, error) {
 	return gitRepo{git: git, name: name, rootDir: root}, nil
 }
 
-func (git git) rootDir(cwd string) (string, error) {
+func (git gitCmd) rootDir(cwd string) (string, error) {
 	return git.Command("-C", cwd, "rev-parse", "--show-toplevel").RunStdout()
 }
 
-func (git git) repoName(root string) string {
+func (git gitCmd) repoName(root string) string {
 	for _, strat := range []func() (string, bool){
 		func() (string, bool) { return git.checkExplicitRepoName(root) },
 		func() (string, bool) { return git.parseOriginURL(root) },
@@ -69,7 +72,7 @@ var urlRegexes = []*regexp.Regexp{
 	regexp.MustCompile("^git@github.com:[^/]+/(.+).git$"),
 }
 
-func (git git) checkExplicitRepoName(root string) (string, bool) {
+func (git gitCmd) checkExplicitRepoName(root string) (string, bool) {
 	n, stderr, err := git.Command("-C", root, "config", "tmux-vcs-sync.name").RunOutput()
 	if err != nil {
 		if len(stderr) == 0 {
@@ -81,7 +84,7 @@ func (git git) checkExplicitRepoName(root string) (string, bool) {
 	return n, true
 }
 
-func (git git) parseOriginURL(root string) (string, bool) {
+func (git gitCmd) parseOriginURL(root string) (string, bool) {
 	url, stderr, err := git.Command("-C", root, "remote", "get-url", "origin").RunOutput()
 	if err != nil {
 		if strings.Contains(stderr, "No such remote") {
@@ -100,7 +103,7 @@ func (git git) parseOriginURL(root string) (string, bool) {
 }
 
 type gitRepo struct {
-	git
+	git     gitCmd
 	name    string
 	rootDir string
 }
