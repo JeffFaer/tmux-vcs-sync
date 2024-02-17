@@ -32,7 +32,6 @@ func TestRepoAPI(t *testing.T) {
 		if err := git.Command("-C", dir, "commit", "--allow-empty", "--message", "Initial commit.").Run(); err != nil {
 			return nil, fmt.Errorf("git initial commit: %v", err)
 		}
-		git.Command("-C", dir, "log").Run()
 		return git.git.Repository(dir)
 	}
 	repotest.RepoTests(t, newGitRepo, repotest.Options{NoopRenameIsOK: true})
