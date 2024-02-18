@@ -32,7 +32,7 @@ var rootCmd = &cobra.Command{
 		HiddenDefaultCmd: true,
 	},
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-		if cmd.Name() == "completion" {
+		if par := cmd.Parent(); par != nil && par.Name() == "completion" {
 			return nil
 		}
 		slog.SetDefault(slog.New(console.NewHandler(os.Stderr, &console.HandlerOptions{

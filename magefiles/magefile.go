@@ -30,18 +30,7 @@ func (Build) Build() error {
 func (Build) Completion(shell string) error {
 	mg.Deps(Build.Build)
 	fmt.Printf("Generating %s completion...\n", shell)
-	f, err := os.OpenFile(fmt.Sprintf("tvs_completion.%s", shell), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		return err
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	if _, err := sh.Exec(nil, f, os.Stderr, filepath.Join(cwd, "tmux-vcs-sync"), "completion", shell); err != nil {
-		return err
-	}
-	return f.Close()
+	return os.WriteFile(fmt.Sprintf("tvs_completion.%s", shell), []byte(fmt.Sprintf("source <(tmux-vcs-sync completion %q)", shell)), 0644)
 }
 
 func Test() error {
