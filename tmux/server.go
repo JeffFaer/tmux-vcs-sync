@@ -91,6 +91,17 @@ func CurrentServerOrDefault() *Server {
 	return srv
 }
 
+func (srv *Server) LogValue() slog.Value {
+	switch {
+	case srv.opts.socketPath != "":
+		return slog.GroupValue(slog.String("socket", srv.opts.socketPath))
+	case srv.opts.socketName != "":
+		return slog.GroupValue(slog.String("socket", srv.opts.socketName))
+	default:
+		return slog.StringValue("<<default server>>")
+	}
+}
+
 func (srv *Server) command(args ...string) *exec.Command {
 	args = append(srv.opts.args(), args...)
 	return tmux.Command(args...)

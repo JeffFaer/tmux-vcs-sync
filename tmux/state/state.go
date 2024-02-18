@@ -35,21 +35,21 @@ func New(srv *tmux.Server) (*State, error) {
 	repos := make(map[string]api.Repository)
 	for _, sesh := range sessions {
 		logger := slog.Default().With("id", sesh.ID)
-		logger.Info("Checking for repository in tmux session.")
+		logger.Debug("Checking for repository in tmux session.")
 		props, err := sesh.Properties(tmux.SessionName, tmux.SessionPath)
 		if err != nil {
 			return nil, err
 		}
 		name, path := props[tmux.SessionName], props[tmux.SessionPath]
 		logger = logger.With("session_name", name)
-		logger.Info("Resolved tmux session properties.")
+		logger.Debug("Resolved tmux session properties.")
 
 		repo, ok := repos[path]
 		if !ok {
 			var err error
 			repo, err = api.Registered.MaybeFindRepository(path)
 			if err != nil {
-				logger.Warn("Error while checking for repository in tmux session.")
+				logger.Warn("Error while checking for repository in tmux session.", "error", err)
 				continue
 			}
 			repos[path] = repo
@@ -65,7 +65,7 @@ func New(srv *tmux.Server) (*State, error) {
 			repo: repo,
 		}
 		st.repos[parsed.Repo] = true
-		logger.Info("Found a repository", "name", parsed)
+		logger.Info("Found repository in tmux session.", "name", parsed)
 	}
 	return st, nil
 }
@@ -83,7 +83,12 @@ func (st *State) sessionNameString(n SessionName) string {
 }
 
 func (st *State) Session(repo api.Repository, workUnitName string) *tmux.Session {
-	return st.sessions[NewSessionName(repo, workUnitName)].tmux
+	n := NewSessionName(repo, workUnitName)
+	ret := st.sessions[n].tmux
+	if ret != nil {
+		slog.Info("Found existing tmux session for work unit.", "id", ret.ID, "name", n)
+	}
+	return ret
 }
 
 func (st *State) NewSession(repo api.Repository, workUnitName string) (*tmux.Session, error) {

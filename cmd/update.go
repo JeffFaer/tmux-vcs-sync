@@ -46,8 +46,10 @@ var updateCommand = &cobra.Command{
 			if cur, err := repo.Current(); err != nil {
 				return fmt.Errorf("couldn't check repo's current %s: %w", repo.VCS().WorkUnitName(), err)
 			} else if cur != parsed.WorkUnit {
+				slog.Info("Updating repository.", "current", cur, "want", parsed.WorkUnit)
 				return repo.Update(parsed.WorkUnit)
 			}
+			slog.Info("No update needed.")
 			if failNoop {
 				os.Exit(1)
 			}
@@ -60,7 +62,7 @@ var updateCommand = &cobra.Command{
 
 func update(workUnitName string) error {
 	srv := tmux.CurrentServerOrDefault()
-	state, err := state.New(srv)
+	st, err := state.New(srv)
 	if err != nil {
 		return err
 	}
@@ -70,7 +72,7 @@ func update(workUnitName string) error {
 		repo = cur
 	} else {
 		var err2 error
-		repo, err2 = state.MaybeFindRepository(workUnitName)
+		repo, err2 = st.MaybeFindRepository(workUnitName)
 		if err2 != nil {
 			return errors.Join(err1, err2)
 		}
@@ -81,11 +83,12 @@ func update(workUnitName string) error {
 			slog.Warn("An error occurred with the current repository.", "error", err1)
 		}
 	}
+	slog.Info("Found repository for requested work unit.", "name", state.NewSessionName(repo, workUnitName))
 
-	sesh := state.Session(repo, workUnitName)
+	sesh := st.Session(repo, workUnitName)
 	var update bool
 	if sesh == nil {
-		sesh, err = state.NewSession(repo, workUnitName)
+		sesh, err = st.NewSession(repo, workUnitName)
 		if err != nil {
 			return err
 		}
@@ -94,6 +97,7 @@ func update(workUnitName string) error {
 	if cur, err := repo.Current(); err != nil {
 		return fmt.Errorf("couldn't check repo's current %s: %w", repo.VCS().WorkUnitName(), err)
 	} else if cur != workUnitName {
+		slog.Info("Updating repository.", "current", cur, "want", workUnitName)
 		if err := repo.Update(workUnitName); err != nil {
 			return err
 		}
@@ -111,6 +115,7 @@ func update(workUnitName string) error {
 	if update {
 		return nil
 	}
+	slog.Info("No update needed.")
 	if failNoop {
 		os.Exit(1)
 	}
