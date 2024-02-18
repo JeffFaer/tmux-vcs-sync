@@ -48,88 +48,92 @@ func (git git) Repository(dir string) (api.Repository, error) {
 	if err != nil {
 		return nil, err
 	}
-	name := git.repoName(root)
-	return gitRepo{git: git, name: name, rootDir: root}, nil
+	return &gitRepo{git: git, rootDir: root}, nil
 }
 
 func (git git) rootDir(cwd string) (string, error) {
 	return git.Command("-C", cwd, "rev-parse", "--show-toplevel").RunStdout()
 }
 
-func (git git) repoName(root string) string {
-	for _, strat := range []func() (string, bool){
-		func() (string, bool) { return git.checkExplicitRepoName(root) },
-		func() (string, bool) { return git.parseOriginURL(root) },
+type gitRepo struct {
+	git
+	rootDir string
+
+	name string
+}
+
+func (repo *gitRepo) Command(args ...string) *exec.Command {
+	args = append([]string{"-C", repo.rootDir}, args...)
+	return repo.git.Command(args...)
+}
+
+func (repo *gitRepo) VCS() api.VersionControlSystem {
+	return repo.git
+}
+
+func (repo *gitRepo) Name() string {
+	if repo.name != "" {
+		return repo.name
+	}
+	if n := repo.repoNameOverride(); n != "" {
+		repo.name = n
+	} else {
+		repo.name = filepath.Base(repo.rootDir)
+	}
+	return repo.name
+}
+
+func (repo *gitRepo) repoNameOverride() string {
+	for _, strat := range []func() string{
+		repo.checkExplicitRepoName,
+		repo.parseOriginURL,
 	} {
-		if n, ok := strat(); ok {
+		if n := strat(); n != "" {
 			return n
 		}
 	}
-	return filepath.Base(root)
+	return ""
 }
 
 var urlRegexes = []*regexp.Regexp{
 	regexp.MustCompile("^git@github.com:[^/]+/(.+).git$"),
 }
 
-func (git git) checkExplicitRepoName(root string) (string, bool) {
-	n, stderr, err := git.Command("-C", root, "config", "tmux-vcs-sync.name").RunOutput()
+func (repo *gitRepo) checkExplicitRepoName() string {
+	n, err := repo.configValue("tmux-vcs-sync.name")
 	if err != nil {
-		if len(stderr) == 0 {
-			return "", false
-		}
-		fmt.Fprint(os.Stderr, stderr)
-		return "", false
+		return ""
 	}
-	return n, true
+	return n
 }
 
-func (git git) parseOriginURL(root string) (string, bool) {
-	url, stderr, err := git.Command("-C", root, "remote", "get-url", "origin").RunOutput()
+func (repo *gitRepo) parseOriginURL() string {
+	url, stderr, err := repo.Command("remote", "get-url", "origin").RunOutput()
 	if err != nil {
 		if strings.Contains(stderr, "No such remote") {
-			return "", false
+			return ""
 		}
 		fmt.Fprint(os.Stderr, stderr)
-		return "", false
+		return ""
 	}
 	for _, regex := range urlRegexes {
 		m := regex.FindStringSubmatch(url)
-		if m != nil {
-			return m[1], true
+		if m != nil && m[1] != "" {
+			return m[1]
 		}
 	}
-	return "", false
+	return ""
 }
 
-type gitRepo struct {
-	git
-	name    string
-	rootDir string
-}
-
-func (repo gitRepo) Command(args ...string) *exec.Command {
-	args = append([]string{"-C", repo.rootDir}, args...)
-	return repo.git.Command(args...)
-}
-
-func (repo gitRepo) VCS() api.VersionControlSystem {
-	return repo.git
-}
-
-func (repo gitRepo) Name() string {
-	return repo.name
-}
-
-func (repo gitRepo) RootDir() string {
+func (repo *gitRepo) RootDir() string {
 	return repo.rootDir
 }
 
-func (repo gitRepo) Current() (string, error) {
+func (repo *gitRepo) Current() (string, error) {
 	return repo.Command("rev-parse", "--abbrev-ref", "HEAD").RunStdout()
 }
 
-func (repo gitRepo) New(workUnitName string) error {
+func (repo *gitRepo) New(workUnitName string) error {
 	n, err := repo.defaultBranchName()
 	if err != nil {
 		return err
@@ -138,7 +142,7 @@ func (repo gitRepo) New(workUnitName string) error {
 }
 
 // defaultBranch name attempts to determine the default branch name of this repository.
-func (repo gitRepo) defaultBranchName() (string, error) {
+func (repo *gitRepo) defaultBranchName() (string, error) {
 	def, err := repo.configValue("init.defaultBranch")
 	if err != nil {
 		slog.Warn("Could not determine init.defaultBranch preference.", "error", err)
@@ -152,28 +156,36 @@ func (repo gitRepo) defaultBranchName() (string, error) {
 	return "", fmt.Errorf("could not determine default branch")
 }
 
-func (repo gitRepo) configValue(key string) (string, error) {
-	return repo.Command("config", key).RunStdout()
+func (repo *gitRepo) configValue(key string) (string, error) {
+	stdout, stderr, err := repo.Command("config", key).RunOutput()
+	if err != nil {
+		if stderr == "" {
+			return "", nil
+		}
+		fmt.Fprint(os.Stderr, stderr)
+		return "", err
+	}
+	return stdout, nil
 }
 
 // branchExists determines whether a branch exists in the this repository.
-func (repo gitRepo) branchExists(name string) bool {
+func (repo *gitRepo) branchExists(name string) bool {
 	err := repo.Command("show-ref", "--verify", "--quiet", fmt.Sprintf("refs/heads/%s", name)).Run()
 	return err == nil
 }
 
-func (repo gitRepo) Commit(workUnitName string) error {
+func (repo *gitRepo) Commit(workUnitName string) error {
 	return repo.Command("checkout", "-b", workUnitName).Run()
 }
 
-func (repo gitRepo) Rename(workUnitName string) error {
+func (repo *gitRepo) Rename(workUnitName string) error {
 	return repo.Command("branch", "-m", workUnitName).Run()
 }
 
-func (repo gitRepo) Exists(workUnitName string) (bool, error) {
+func (repo *gitRepo) Exists(workUnitName string) (bool, error) {
 	return repo.branchExists(workUnitName), nil
 }
 
-func (repo gitRepo) Update(workUnitName string) error {
+func (repo *gitRepo) Update(workUnitName string) error {
 	return repo.Command("checkout", workUnitName).Run()
 }
