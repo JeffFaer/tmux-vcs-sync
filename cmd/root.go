@@ -31,7 +31,10 @@ var rootCmd = &cobra.Command{
 	CompletionOptions: cobra.CompletionOptions{
 		HiddenDefaultCmd: true,
 	},
-	PersistentPreRunE: func(*cobra.Command, []string) error {
+	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+		if cmd.Name() == "completion" {
+			return nil
+		}
 		slog.SetDefault(slog.New(console.NewHandler(os.Stderr, &console.HandlerOptions{
 			Level:      levels[min(verbosity, len(levels)-1)],
 			TimeFormat: time.RFC3339,
