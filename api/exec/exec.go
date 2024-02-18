@@ -109,7 +109,7 @@ func (cmd *Command) Start() error {
 	err := cmd.cmd.Start()
 	go func() {
 		cmd.Wait()
-		logger.Debug("Executing external process. (2/2)", "elapsed", time.Since(start), "exit_code", cmd.ProcessState.ExitCode())
+		logger.Debug("Executing external process. (2/2)", "elapsed", time.Since(start).Truncate(time.Millisecond), "exit_code", cmd.ProcessState.ExitCode())
 	}()
 	return err
 }
@@ -119,7 +119,7 @@ func (cmd *Command) Run() error {
 	logger := slog.Default().With("command", cmd)
 	logger.Debug("Executing external process. (1/2)")
 	err := cmd.cmd.Run()
-	logger.Debug("Executing external process. (2/2)", "elapsed", time.Since(start), "exit_code", cmd.ProcessState.ExitCode())
+	logger.Debug("Executing external process. (2/2)", "elapsed", time.Since(start).Truncate(time.Millisecond), "exit_code", cmd.ProcessState.ExitCode())
 	return err
 }
 
