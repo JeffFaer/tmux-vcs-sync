@@ -213,7 +213,7 @@ func RepoTests(t *testing.T, repoCtor func(string) (api.Repository, error), opts
 			wantErr: false,
 		},
 		{
-			name: "Update_NonExistantWorkUnitName",
+			name: "Update_NonExistentWorkUnitName",
 
 			test: func(repo api.Repository) error {
 				workUnitName := "abcd"
