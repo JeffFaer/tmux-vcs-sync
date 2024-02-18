@@ -81,7 +81,7 @@ func (all VersionControlSystems) MaybeCurrentRepository() (Repository, error) {
 	}
 	repo, err := all.MaybeFindRepository(wd)
 	if err == nil && repo != nil {
-		slog.Info("Discovered current repository", "vcs", repo.VCS().Name(), "repo", repo.Name())
+		slog.Info("Discovered repository for current working directory.", "vcs", repo.VCS().Name(), "repo", repo.Name())
 	}
 	return repo, err
 }
