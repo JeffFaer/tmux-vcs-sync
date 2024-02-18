@@ -57,6 +57,21 @@ $ cd git
 $ mage install
 ```
 
+### Shell completion
+
+You can generate shell completion with
+
+```sh
+$ mage install:completion "${SHELL:?}"
+```
+
+where `${SHELL:?}` is one of the shells that
+[cobra](https://github.com/spf13/cobra) is able to generate
+completion for (at the time of writing: bash, fish, powershell, and zsh).
+
+It will generate a `tvs_completion.${SHELL:?}` file and attempt to put it into
+an appropriate directory for your shell.
+
 ## Usage
 
 ```sh
@@ -141,7 +156,6 @@ $ go work use . api git
   - Tests.
   - Cleanup function to prune tmux sessions after their work units
     have been merged.
-  - Bash completion.
   - Custom completion for update arguments.
   - Update should accept repo-qualified work unit names.
   - tmux display-menu with better work unit ordering.
