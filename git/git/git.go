@@ -13,6 +13,8 @@ import (
 	"github.com/JeffFaer/tmux-vcs-sync/api/exec"
 )
 
+var errUnstableRepoState = fmt.Errorf("unable to determine branch name (is the repo in an unstable state?)")
+
 func init() {
 	if exec, err := exec.Lookup("git"); err != nil {
 		slog.Warn("Could not find git.", "error", err)
@@ -131,7 +133,14 @@ func (repo *gitRepo) RootDir() string {
 }
 
 func (repo *gitRepo) Current() (string, error) {
-	return repo.Command("rev-parse", "--abbrev-ref", "HEAD").RunStdout()
+	cur, err := repo.Command("rev-parse", "--abbrev-ref", "HEAD").RunStdout()
+	if err != nil {
+		return "", err
+	}
+	if cur == "HEAD" {
+		return "", errUnstableRepoState
+	}
+	return cur, nil
 }
 
 func (repo *gitRepo) New(workUnitName string) error {
