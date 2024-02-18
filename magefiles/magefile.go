@@ -34,7 +34,11 @@ func (Build) Completion(shell string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := sh.Exec(nil, f, os.Stderr, "tmux-vcs-sync", "completion", shell); err != nil {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	if _, err := sh.Exec(nil, f, os.Stderr, filepath.Join(cwd, "tmux-vcs-sync"), "completion", shell); err != nil {
 		return err
 	}
 	return f.Close()
