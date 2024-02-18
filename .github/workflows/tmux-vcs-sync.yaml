@@ -25,4 +25,4 @@ jobs:
         uses: magefile/mage-action@v3
         with:
           version: latest
-          args: -v build test build:completion bash
+          args: -v build build:completion bash test
