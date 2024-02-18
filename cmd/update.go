@@ -61,7 +61,7 @@ var updateCommand = &cobra.Command{
 }
 
 func update(workUnitName string) error {
-	srv := tmux.CurrentServerOrDefault()
+	srv, hasCurrentServer := tmux.CurrentServerOrDefault()
 	st, err := state.New(srv)
 	if err != nil {
 		return err
@@ -85,15 +85,21 @@ func update(workUnitName string) error {
 	}
 	slog.Info("Found repository for requested work unit.", "name", state.NewSessionName(repo, workUnitName))
 
-	sesh := st.Session(repo, workUnitName)
 	var update bool
+
+	// Find the tmux session.
+	sesh := st.Session(repo, workUnitName)
+	var madeSesh bool
 	if sesh == nil {
 		sesh, err = st.NewSession(repo, workUnitName)
 		if err != nil {
 			return err
 		}
 		update = true
+		madeSesh = true
 	}
+
+	// Update to the work unit.
 	if cur, err := repo.Current(); err != nil {
 		return fmt.Errorf("couldn't check repo's current %s: %w", repo.VCS().WorkUnitName(), err)
 	} else if cur != workUnitName {
@@ -103,9 +109,18 @@ func update(workUnitName string) error {
 		}
 		update = true
 	}
-	if cur, err := tmux.MaybeCurrentSession(); err != nil {
+
+	// Switch or attach to the tmux session.
+	var needsSwitch bool
+	if madeSesh || !hasCurrentServer {
+		// If we just made the session or if the terminal isn't currently in tmux.
+		needsSwitch = true
+	} else if cur, err := tmux.MaybeCurrentSession(); err != nil {
 		return fmt.Errorf("couldn't check tmux current state: %w", err)
 	} else if cur == nil || !cur.Equal(sesh) {
+		needsSwitch = true
+	}
+	if needsSwitch {
 		if err := srv.AttachOrSwitch(sesh.Target()); err != nil {
 			return err
 		}

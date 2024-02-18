@@ -74,21 +74,29 @@ func CurrentServer() (*Server, error) {
 // MaybeCurrentServer returns a server if this program is running within a tmux
 // server. If it's not, it returns nil.
 func MaybeCurrentServer() *Server {
+	srv := maybeCurrentServer()
+	if srv != nil {
+		slog.Info("Found tmux server.", "server", srv)
+	}
+	return srv
+}
+
+// maybeCurrentServer is the same as MaybeCurrentServer, except it doesn't log.
+func maybeCurrentServer() *Server {
 	sp := strings.SplitN(os.Getenv("TMUX"), ",", 2)
 	if socket := sp[0]; socket != "" {
-		slog.Info("Found tmux server.", "socket", socket)
 		return &Server{serverOptions{socketPath: socket}}
 	}
 	return nil
 }
 
 // CurrentServerOrDefault either returns the CurrentServer, or the default server.
-func CurrentServerOrDefault() *Server {
+func CurrentServerOrDefault() (*Server, bool) {
 	srv := MaybeCurrentServer()
 	if srv == nil {
-		return &Server{}
+		return &Server{}, false
 	}
-	return srv
+	return srv, true
 }
 
 func (srv *Server) LogValue() slog.Value {

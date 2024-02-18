@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 )
 
@@ -34,17 +35,18 @@ func CurrentSession() (*Session, error) {
 // An error may occur if we can't determine the session ID from the running
 // tmux server.
 func MaybeCurrentSession() (*Session, error) {
-	srv := MaybeCurrentServer()
+	srv := maybeCurrentServer()
 	if srv == nil {
 		return nil, nil
 	}
 
-	stdout, err := srv.command("display-message", "-p", string(SessionID)).RunStdout()
+	id, err := srv.command("display-message", "-p", string(SessionID)).RunStdout()
 	if err != nil {
 		return nil, fmt.Errorf("could not determine session ID: %w", err)
 	}
 
-	return &Session{srv, stdout}, nil
+	slog.Info("Found current tmux session.", "server", srv, "session", id)
+	return &Session{srv, id}, nil
 }
 
 func (s *Session) Target() TargetSession {
