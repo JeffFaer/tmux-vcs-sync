@@ -42,7 +42,7 @@ var (
 // OverrideableWriter can be used to indicate that values in Command.Stdout and
 // Command.Stderr are safe to override when requested.
 type OverrideableWriter interface {
-	ConsideredOverridable()
+	consideredOverridable()
 }
 
 // cmd is a type alias that lets us embed *exec.Cmd without
@@ -131,6 +131,16 @@ func (cmd *Command) RunStdout() (string, error) {
 	}
 	err := cmd.Run()
 	return strings.TrimRight(string(stdout.Bytes()), "\n"), err
+}
+
+// RunStderr runs the command and returns its standard error as a trimmed string.
+func (cmd *Command) RunStderr() (string, error) {
+	var stderr bytes.Buffer
+	if err := cmd.setStderr(&stderr); err != nil {
+		return "", err
+	}
+	err := cmd.Run()
+	return strings.TrimRight(string(stderr.Bytes()), "\n"), err
 }
 
 // RunOutput runs the command and returns both its standard output and standard
