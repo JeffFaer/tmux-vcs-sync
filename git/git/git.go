@@ -97,6 +97,7 @@ func (repo *gitRepo) repoNameOverride() string {
 
 var urlRegexes = []*regexp.Regexp{
 	regexp.MustCompile("^git@github.com:[^/]+/(.+).git$"),
+	regexp.MustCompile("^https://github.com/[^/]+/(.+).git$"),
 }
 
 func (repo *gitRepo) checkExplicitRepoName() string {

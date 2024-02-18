@@ -2,6 +2,7 @@ package exec
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -38,6 +39,12 @@ var (
 	defaultStderr = os.NewFile(uintptr(syscall.Stderr), "/dev/stderr")
 )
 
+// OverrideableWriter can be used to indicate that values in Command.Stdout and
+// Command.Stderr are safe to override when requested.
+type OverrideableWriter interface {
+	ConsideredOverridable()
+}
+
 // cmd is a type alias that lets us embed *exec.Cmd without
 // exporting it.
 type cmd = exec.Cmd
@@ -57,16 +64,40 @@ func (cmd *Command) LogValue() slog.Value {
 	return val
 }
 
-func (cmd *Command) StdoutPipe() (io.ReadCloser, error) {
+func (cmd *Command) setStdout(w io.Writer) error {
 	if cmd.Stdout == defaultStdout {
-		cmd.Stdout = nil
+		cmd.Stdout = w
+		return nil
+	}
+	if _, ok := cmd.Stdout.(OverrideableWriter); ok {
+		cmd.Stdout = w
+		return nil
+	}
+	return fmt.Errorf("exec: Stdout already set")
+}
+
+func (cmd *Command) setStderr(w io.Writer) error {
+	if cmd.Stderr == defaultStderr {
+		cmd.Stderr = w
+		return nil
+	}
+	if _, ok := cmd.Stderr.(OverrideableWriter); ok {
+		cmd.Stderr = w
+		return nil
+	}
+	return fmt.Errorf("exec: Stderr already set")
+}
+
+func (cmd *Command) StdoutPipe() (io.ReadCloser, error) {
+	if err := cmd.setStdout(nil); err != nil {
+		return nil, err
 	}
 	return cmd.cmd.StdoutPipe()
 }
 
 func (cmd *Command) StderrPipe() (io.ReadCloser, error) {
-	if cmd.Stderr == defaultStderr {
-		cmd.Stderr = nil
+	if err := cmd.setStderr(nil); err != nil {
+		return nil, err
 	}
 	return cmd.cmd.StderrPipe()
 }
@@ -94,11 +125,10 @@ func (cmd *Command) Run() error {
 
 // RunStdout runs the command and returns its standard output as a trimmed string.
 func (cmd *Command) RunStdout() (string, error) {
-	if cmd.Stdout != defaultStdout {
-		return "", fmt.Errorf("exec: Stdout already set")
-	}
 	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
+	if err := cmd.setStdout(&stdout); err != nil {
+		return "", err
+	}
 	err := cmd.Run()
 	return strings.TrimRight(string(stdout.Bytes()), "\n"), err
 }
@@ -106,15 +136,10 @@ func (cmd *Command) RunStdout() (string, error) {
 // RunOutput runs the command and returns both its standard output and standard
 // error as a trimmed string.
 func (cmd *Command) RunOutput() (string, string, error) {
-	if cmd.Stdout != defaultStdout {
-		return "", "", fmt.Errorf("exec: Stdout already set")
-	}
-	if cmd.Stderr != defaultStderr {
-		return "", "", fmt.Errorf("exec: Stderr already set")
-	}
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	if err := errors.Join(cmd.setStdout(&stdout), cmd.setStderr(&stderr)); err != nil {
+		return "", "", err
+	}
 	err := cmd.Run()
 	return strings.TrimRight(string(stdout.Bytes()), "\n"), strings.TrimRight(string(stderr.Bytes()), "\n"), err
 }
