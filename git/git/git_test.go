@@ -77,7 +77,11 @@ func TestRepoAPI(t *testing.T) {
 		dir := t.TempDir()
 		return git.newRepo(dir, name)
 	}
-	repotest.RepoTests(t, newGitRepo, repotest.Options{NoopRenameIsOK: true})
+	repotest.RepoTests(t, newGitRepo, repotest.Options{
+		NoopRenameIsOK:            true,
+		ExtraListWorkUnitNames:    []string{"JeffFaer/slashed-branch-name"},
+		ExtraListWorkUnitPrefixes: []repotest.ListWorkUnitTestCase{{Prefix: "JeffFaer*", Want: []string{"JeffFaer/slashed-branch-name"}}},
+	})
 }
 
 func TestRepoName(t *testing.T) {

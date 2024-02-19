@@ -33,6 +33,9 @@ type Repository interface {
 	RootDir() string
 	// Current returns the name of the current work unit.
 	Current() (string, error)
+	// ListWorkUnits returns all of the work units in this repository that start
+	// with the given prefix.
+	ListWorkUnits(prefix string) ([]string, error)
 	// New creates a new work unit with the given name on top of the repository's trunk.
 	// e.g. Create a new branch on main.
 	New(workUnitName string) error
@@ -86,7 +89,10 @@ func (all VersionControlSystems) MaybeCurrentRepository() (Repository, error) {
 	return repo, err
 }
 
-// MaybeFindRepository attempts to find a repository for the given directory, and returns nil, nil if one can definitively not be found.
+// MaybeFindRepository attempts to find an Repository for the given directory.
+// Returns an error if multiple Repositories claim to exist in the given
+// directory.
+// Returns nil, nil if no such Repository can be found.
 func (all VersionControlSystems) MaybeFindRepository(dir string) (Repository, error) {
 	if len(all) == 0 {
 		return nil, fmt.Errorf("no registered VCS")
@@ -98,6 +104,11 @@ func (all VersionControlSystems) MaybeFindRepository(dir string) (Repository, er
 	return repo, nil
 }
 
+// MaybeFindRepository attempts to find the single Repository that fn yields for
+// all elems.
+// Returns an error if fn yields a Repository more than once as we test it
+// against each element in elems.
+// Returns nil, nil if fn never yields a Repository (or an error).
 func MaybeFindRepository[T any](elems []T, fn func(T) (Repository, error)) (Repository, error) {
 	var repos []Repository
 	var errs []error

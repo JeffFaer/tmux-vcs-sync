@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/JeffFaer/tmux-vcs-sync/api"
 	"github.com/JeffFaer/tmux-vcs-sync/tmux"
@@ -27,7 +29,10 @@ var updateCommand = &cobra.Command{
 1. If executed without a work unit name, it will update the VCS to point at the work unit that the current tmux session represents.
 2. If given a work unit name, it will attempt to find that work unit in any of the repositories currently active in tmux and update both tmux and that VCS to point at the given work unit. Note: This means that you can update to a work unit that exists in a different repository.`,
 	Args: cobra.RangeArgs(0, 1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	ValidArgsFunction: func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return suggestWorkUnitNames(toComplete), 0
+	},
+	RunE: func(_ *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			repo, err := api.Registered.CurrentRepository()
 			if err != nil {
@@ -58,6 +63,39 @@ var updateCommand = &cobra.Command{
 
 		return update(args[0])
 	},
+}
+
+func suggestWorkUnitNames(toComplete string) []string {
+	repos := make(map[state.RepoName]api.Repository)
+	if srv := tmux.MaybeCurrentServer(); srv != nil {
+		st, err := state.New(srv)
+		if err != nil {
+			slog.Warn("Could not determine repositories from tmux server.", "server", srv, "error", err)
+		} else {
+			for _, repo := range st.Repositories() {
+				repos[state.NewRepoName(repo)] = repo
+			}
+		}
+	}
+	if repo, err := api.Registered.MaybeCurrentRepository(); err != nil {
+		slog.Warn("Could not determine current repository.", "error", err)
+	} else {
+		n := state.NewRepoName(repo)
+		if _, ok := repos[n]; !ok {
+			repos[n] = repo
+		}
+	}
+
+	var suggestions []string
+	for name, repo := range repos {
+		wus, err := repo.ListWorkUnits(toComplete)
+		if err != nil {
+			slog.Warn("Could not list work units.", "repo", name, "error", err)
+		}
+		suggestions = append(suggestions, wus...)
+	}
+	suggestions = slices.DeleteFunc(suggestions, func(s string) bool { return !strings.HasPrefix(s, toComplete) })
+	return suggestions
 }
 
 func update(workUnitName string) error {

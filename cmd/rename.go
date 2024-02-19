@@ -17,7 +17,7 @@ var renameCommand = &cobra.Command{
 	Use:   "rename new-name",
 	Short: "Rename both the current tmux session and work unit.",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, args []string) error {
 		return rename(args[0])
 	},
 }

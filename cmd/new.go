@@ -18,7 +18,7 @@ var newCommand = &cobra.Command{
 	Use:   "new name",
 	Short: "Create a tmux session and work unit based on the current repository's trunk.",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, args []string) error {
 		return newWorkUnit(args[0], api.Repository.New)
 	},
 }
