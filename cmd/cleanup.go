@@ -42,12 +42,14 @@ func cleanup() error {
 			validWorkUnits[state.NewSessionName(repo, wu)] = true
 		}
 	}
+	invalidSessions := make(map[*tmux.Session]state.SessionName)
 	var toRemove []*tmux.Session
 	for n, sesh := range st.Sessions() {
 		if errRepos[n.RepoName] {
 			continue
 		}
 		if !validWorkUnits[n] {
+			invalidSessions[sesh] = n
 			toRemove = append(toRemove, sesh)
 		}
 	}
@@ -70,6 +72,7 @@ func cleanup() error {
 	}
 
 	for _, sesh := range toRemove {
+		slog.Info("Killing session.", "session_id", sesh.ID, "name", invalidSessions[sesh])
 		if err := sesh.Kill(); err != nil {
 			return err
 		}
