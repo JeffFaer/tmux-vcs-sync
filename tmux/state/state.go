@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/JeffFaer/tmux-vcs-sync/api"
@@ -147,6 +148,63 @@ func (st *State) RenameSession(repo api.Repository, old, new string) error {
 
 	delete(st.sessions, oldName)
 	st.sessions[newName] = sesh
+
+	if err := st.updateSessionNames(); err != nil {
+		slog.Warn("Failed to update tmux session names.", "error", err)
+	}
+	return nil
+}
+
+func (st *State) PruneSessions() error {
+	validWorkUnits := make(map[SessionName]bool)
+	errRepos := make(map[RepoName]bool)
+	for _, repo := range st.Repositories() {
+		wus, err := repo.ListWorkUnits("")
+		if err != nil {
+			n := NewRepoName(repo)
+			errRepos[n] = true
+			slog.Warn("Could not list work units for repository.", "repo", n)
+			continue
+		}
+		for _, wu := range wus {
+			validWorkUnits[NewSessionName(repo, wu)] = true
+		}
+	}
+	invalidSessions := make(map[*tmux.Session]SessionName)
+	var toRemove []*tmux.Session
+	for n, sesh := range st.Sessions() {
+		if errRepos[n.RepoName] {
+			continue
+		}
+		if !validWorkUnits[n] {
+			invalidSessions[sesh] = n
+			toRemove = append(toRemove, sesh)
+		}
+	}
+	if curSesh, err := tmux.MaybeCurrentSession(); err != nil {
+		slog.Warn("Could not determine current session.", "error", err)
+	} else if curSesh != nil {
+		// Delete the current session last so we don't terminate this command
+		// early.
+		var del bool
+		toRemove = slices.DeleteFunc(toRemove, func(other *tmux.Session) bool {
+			if curSesh.Equal(other) {
+				del = true
+				return true
+			}
+			return false
+		})
+		if del {
+			toRemove = append(toRemove, curSesh)
+		}
+	}
+
+	for _, sesh := range toRemove {
+		slog.Info("Killing session.", "session_id", sesh.ID, "name", invalidSessions[sesh])
+		if err := sesh.Kill(); err != nil {
+			return err
+		}
+	}
 
 	if err := st.updateSessionNames(); err != nil {
 		slog.Warn("Failed to update tmux session names.", "error", err)
