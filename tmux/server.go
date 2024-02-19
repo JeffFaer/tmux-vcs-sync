@@ -145,10 +145,14 @@ func (srv *Server) Equal(other *Server) bool {
 func (srv *Server) ListSessions() ([]*Session, error) {
 	stdout, stderr, err := srv.command("list-sessions", "-F", string(SessionID)).RunOutput()
 	if err != nil {
-		if strings.Contains(stderr, "no server running") {
+		if
+		// Socket doesn't yet exists.
+		strings.Contains(stderr, "No such file or directory") ||
+			// Socket exists, but no server owns it.
+			strings.Contains(stderr, "no server running") {
 			return nil, nil
 		}
-		fmt.Fprint(os.Stderr, stderr)
+		fmt.Fprintln(os.Stderr, stderr)
 		return nil, err
 	}
 	var res []*Session
