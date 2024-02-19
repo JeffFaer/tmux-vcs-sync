@@ -68,7 +68,7 @@ func (s *Session) Property(prop SessionProperty) (string, error) {
 // Properties fetches properties about a session.
 func (s *Session) Properties(props ...SessionProperty) (map[SessionProperty]string, error) {
 	res, err := properties(props, func(keys []string) ([]string, error) {
-		stdout, err := s.Server.command("display-message", "-t", s.ID, "-p", strings.Join(keys, "\n")).RunStdout()
+		stdout, err := s.DisplayMessage(strings.Join(keys, "\n"))
 		if err != nil {
 			return nil, err
 		}
@@ -103,4 +103,19 @@ func (s *Session) Kill() error {
 		return fmt.Errorf("could not kill session %q: %w", s.ID, err)
 	}
 	return nil
+}
+
+func (s *Session) SetOption(opt Option, val string) error {
+	if err := s.Server.command("set-option", "-t", s.ID, string(opt), val).Run(); err != nil {
+		return fmt.Errorf("set-option -t %s %q %q: %w", s.ID, opt, val, err)
+	}
+	return nil
+}
+
+func (s *Session) DisplayMessage(msg string) (string, error) {
+	stdout, err := s.Server.command("display-message", "-t", s.ID, "-p", msg).RunStdout()
+	if err != nil {
+		return "", fmt.Errorf("display-message -t %s %q: %w", s.ID, msg, err)
+	}
+	return stdout, nil
 }

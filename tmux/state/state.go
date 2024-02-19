@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/JeffFaer/tmux-vcs-sync/api"
@@ -222,13 +223,34 @@ func (st *State) PruneSessions() error {
 func (st *State) updateSessionNames() error {
 	var errs []error
 	for k, sesh := range st.sessions {
-		name, err := sesh.Property(tmux.SessionName)
+		props, err := sesh.Properties(tmux.SessionName, tmux.StatusLeft.SessionProperty(), tmux.StatusLeftLength.SessionProperty())
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
+		name := props[tmux.SessionName]
+		statusLeft := props[tmux.StatusLeft.SessionProperty()]
+		statusLeftLength := props[tmux.StatusLeftLength.SessionProperty()]
 		if want := st.sessionNameString(k); name != want {
 			if err := sesh.Rename(want); err != nil {
+				errs = append(errs, err)
+				continue
+			}
+		}
+
+		msg, err := sesh.DisplayMessage(statusLeft)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		wantLength := len(msg)
+		got, err := strconv.Atoi(statusLeftLength)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("tmux session %s has invalid %s value %q: %w", sesh.ID, tmux.StatusLeftLength, statusLeftLength, err))
+			continue
+		}
+		if wantLength > got {
+			if err := sesh.SetOption(tmux.StatusLeftLength, strconv.Itoa(wantLength)); err != nil {
 				errs = append(errs, err)
 				continue
 			}

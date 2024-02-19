@@ -19,3 +19,14 @@ func init() {
 		panic(err)
 	}
 }
+
+type Option string
+
+const (
+	StatusLeft       Option = "status-left"
+	StatusLeftLength Option = "status-left-length"
+)
+
+func (opt Option) SessionProperty() SessionProperty {
+	return SessionProperty(fmt.Sprintf("#{%s}", opt))
+}
