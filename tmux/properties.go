@@ -1,5 +1,9 @@
 package tmux
 
+import (
+	"fmt"
+)
+
 // properties is a helper function to make implementing property lookups for
 // different tmux entities a little easier.
 // keys are all the properties being fetched.
@@ -13,7 +17,7 @@ func properties[T ~string](keys []T, fn func([]string) ([]string, error)) (map[T
 
 	props, err := fn(keyStrings)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch properties %s: %w", keyStrings, err)
 	}
 	res := make(map[T]string, len(keys))
 	for i, prop := range props {
