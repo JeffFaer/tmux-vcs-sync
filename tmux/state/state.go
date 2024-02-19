@@ -17,7 +17,7 @@ type State struct {
 	// tmux sessions in srv with their associated repositories.
 	sessions map[SessionName]*tmux.Session
 	// An index of unqualified repo names that exist in sessions.
-	unqualifiedRepos map[string]bool
+	unqualifiedRepos map[string]int
 	// Representative examples of each api.Repository in sessions.
 	repos map[RepoName]api.Repository
 }
@@ -31,7 +31,7 @@ func New(srv *tmux.Server) (*State, error) {
 	st := &State{
 		srv:              srv,
 		sessions:         make(map[SessionName]*tmux.Session),
-		unqualifiedRepos: make(map[string]bool),
+		unqualifiedRepos: make(map[string]int),
 		repos:            make(map[RepoName]api.Repository),
 	}
 	// An index from directory to api.Repository.
@@ -66,7 +66,7 @@ func New(srv *tmux.Server) (*State, error) {
 
 		parsed := ParseSessionName(repo, name)
 		st.sessions[parsed] = sesh
-		st.unqualifiedRepos[parsed.Repo] = true
+		st.unqualifiedRepos[parsed.Repo]++
 		st.repos[parsed.RepoName] = repo
 		logger.Info("Found repository in tmux session.", "name", parsed)
 	}
@@ -74,7 +74,7 @@ func New(srv *tmux.Server) (*State, error) {
 }
 
 func (st *State) sessionNameString(n SessionName) string {
-	if len(st.unqualifiedRepos) > 1 || (len(st.unqualifiedRepos) == 1 && !st.unqualifiedRepos[n.Repo]) {
+	if len(st.unqualifiedRepos) > 1 || (len(st.unqualifiedRepos) == 1 && st.unqualifiedRepos[n.Repo] == 0) {
 		return n.RepoString()
 	}
 	return n.WorkUnitString()
@@ -119,7 +119,7 @@ func (st *State) NewSession(repo api.Repository, workUnitName string) (*tmux.Ses
 	}
 
 	st.sessions[name] = sesh
-	st.unqualifiedRepos[name.Repo] = true
+	st.unqualifiedRepos[name.Repo]++
 	st.repos[name.RepoName] = repo
 	if err := st.updateSessionNames(); err != nil {
 		slog.Warn("Failed to update tmux session names.", "error", err)
@@ -200,9 +200,16 @@ func (st *State) PruneSessions() error {
 	}
 
 	for _, sesh := range toRemove {
-		slog.Info("Killing session.", "session_id", sesh.ID, "name", invalidSessions[sesh])
+		n := invalidSessions[sesh]
+		slog.Info("Killing session.", "session_id", sesh.ID, "name", n)
 		if err := sesh.Kill(); err != nil {
 			return err
+		}
+		delete(st.sessions, n)
+		st.unqualifiedRepos[n.Repo]--
+		if st.unqualifiedRepos[n.Repo] == 0 {
+			delete(st.unqualifiedRepos, n.Repo)
+			delete(st.repos, n.RepoName)
 		}
 	}
 
