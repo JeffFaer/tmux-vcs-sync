@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 
 	"github.com/JeffFaer/tmux-vcs-sync/api"
@@ -13,7 +14,7 @@ import (
 type State struct {
 	srv *tmux.Server
 	// tmux sessions in srv with their associated repositories.
-	sessions map[SessionName]session
+	sessions map[SessionName]*tmux.Session
 	// An index of unqualified repo names that exist in sessions.
 	unqualifiedRepos map[string]bool
 	// Representative examples of each api.Repository in sessions.
@@ -28,7 +29,7 @@ func New(srv *tmux.Server) (*State, error) {
 
 	st := &State{
 		srv:              srv,
-		sessions:         make(map[SessionName]session),
+		sessions:         make(map[SessionName]*tmux.Session),
 		unqualifiedRepos: make(map[string]bool),
 		repos:            make(map[RepoName]api.Repository),
 	}
@@ -63,10 +64,7 @@ func New(srv *tmux.Server) (*State, error) {
 		}
 
 		parsed := ParseSessionName(repo, name)
-		st.sessions[parsed] = session{
-			tmux: sesh,
-			repo: repo,
-		}
+		st.sessions[parsed] = sesh
 		st.unqualifiedRepos[parsed.Repo] = true
 		st.repos[parsed.RepoName] = repo
 		logger.Info("Found repository in tmux session.", "name", parsed)
@@ -74,16 +72,15 @@ func New(srv *tmux.Server) (*State, error) {
 	return st, nil
 }
 
-type session struct {
-	tmux *tmux.Session
-	repo api.Repository
-}
-
 func (st *State) sessionNameString(n SessionName) string {
 	if len(st.unqualifiedRepos) > 1 || (len(st.unqualifiedRepos) == 1 && !st.unqualifiedRepos[n.Repo]) {
 		return n.RepoString()
 	}
 	return n.WorkUnitString()
+}
+
+func (st *State) Sessions() map[SessionName]*tmux.Session {
+	return maps.Clone(st.sessions)
 }
 
 // Repositories returns a representative example for each known RepoName.
@@ -98,7 +95,7 @@ func (st *State) Repositories() []api.Repository {
 // Session determines if a tmux session for the given work unit exists.
 func (st *State) Session(repo api.Repository, workUnitName string) *tmux.Session {
 	n := NewSessionName(repo, workUnitName)
-	ret := st.sessions[n].tmux
+	ret := st.sessions[n]
 	if ret != nil {
 		slog.Info("Found existing tmux session for work unit.", "id", ret.ID, "name", n)
 	}
@@ -120,7 +117,7 @@ func (st *State) NewSession(repo api.Repository, workUnitName string) (*tmux.Ses
 		return nil, fmt.Errorf("failed to create tmux session %q: %w", n, err)
 	}
 
-	st.sessions[name] = session{sesh, repo}
+	st.sessions[name] = sesh
 	st.unqualifiedRepos[name.Repo] = true
 	st.repos[name.RepoName] = repo
 	if err := st.updateSessionNames(); err != nil {
@@ -144,7 +141,7 @@ func (st *State) RenameSession(repo api.Repository, old, new string) error {
 		return fmt.Errorf("tmux session %q already exists", st.sessionNameString(newName))
 	}
 
-	if err := sesh.tmux.Rename(st.sessionNameString(newName)); err != nil {
+	if err := sesh.Rename(st.sessionNameString(newName)); err != nil {
 		return err
 	}
 
@@ -160,13 +157,13 @@ func (st *State) RenameSession(repo api.Repository, old, new string) error {
 func (st *State) updateSessionNames() error {
 	var errs []error
 	for k, sesh := range st.sessions {
-		name, err := sesh.tmux.Property(tmux.SessionName)
+		name, err := sesh.Property(tmux.SessionName)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
 		if want := st.sessionNameString(k); name != want {
-			if err := sesh.tmux.Rename(want); err != nil {
+			if err := sesh.Rename(want); err != nil {
 				errs = append(errs, err)
 				continue
 			}
