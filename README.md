@@ -154,9 +154,6 @@ $ go work use . api git
 ### TODOs
 
   - Tests.
-  - Cleanup function to prune tmux sessions after their work units
-    have been merged.
-  - Prune branches with gone remotes from git plugin.
   - Update should accept repo-qualified work unit names.
   - tmux display-menu with better work unit ordering.
   - tmux hooks to automatically update session names when a session closes.
