@@ -116,7 +116,7 @@ func (repo *gitRepo) parseOriginURL() string {
 		if strings.Contains(stderr, "No such remote") {
 			return ""
 		}
-		fmt.Fprint(os.Stderr, stderr)
+		fmt.Fprintln(os.Stderr, stderr)
 		return ""
 	}
 	for _, regex := range urlRegexes {
@@ -184,7 +184,7 @@ func (repo *gitRepo) configValue(key string) (string, error) {
 		if stderr == "" {
 			return "", nil
 		}
-		fmt.Fprint(os.Stderr, stderr)
+		fmt.Fprintln(os.Stderr, stderr)
 		return "", err
 	}
 	return stdout, nil

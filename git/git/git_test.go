@@ -246,7 +246,7 @@ func (cmd repoCommand) Run(repo *gitRepo) error {
 	orig := repoCmd.Stderr
 	stderr, _ := repoCmd.RunStderr()
 	if !strings.Contains(stderr, cmd.errorMessage) {
-		fmt.Fprint(orig, stderr)
+		fmt.Fprintln(orig, stderr)
 		return fmt.Errorf("did not observe expected error message containing %q", cmd.errorMessage)
 	}
 	return nil
