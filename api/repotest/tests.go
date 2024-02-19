@@ -1,14 +1,24 @@
 package repotest
 
 import (
+	"errors"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/JeffFaer/tmux-vcs-sync/api"
+	"github.com/google/go-cmp/cmp"
 )
 
 type Options struct {
-	NoopRenameIsOK bool
+	NoopRenameIsOK            bool
+	ExtraListWorkUnitNames    []string
+	ExtraListWorkUnitPrefixes []ListWorkUnitTestCase
+}
+
+type ListWorkUnitTestCase struct {
+	Prefix string
+	Want   []string
 }
 
 func RepoTests(t *testing.T, repoCtor func(string) (api.Repository, error), opts Options) {
@@ -223,6 +233,53 @@ func RepoTests(t *testing.T, repoCtor func(string) (api.Repository, error), opts
 				return repo.Update("efgh")
 			},
 			wantErr: true,
+		},
+		{
+			name: "ListWorkUnits",
+
+			test: func(repo api.Repository) error {
+				workUnitNames := append([]string{
+					"abcd1",
+					"abcd2",
+					"efgh",
+				}, opts.ExtraListWorkUnitNames...)
+				cur, err := repo.Current()
+				if err != nil {
+					return fmt.Errorf("repo.Current() = _, %v", err)
+				}
+				for _, n := range workUnitNames {
+					if err := repo.New(n); err != nil {
+						return fmt.Errorf("repo.New(%q) = %v", n, err)
+					}
+				}
+
+				tcs := append([]ListWorkUnitTestCase{
+					{
+						Prefix: "",
+						Want:   slices.Concat(workUnitNames, []string{cur}),
+					},
+					{
+						Prefix: "abcd",
+						Want:   []string{"abcd1", "abcd2"},
+					},
+				}, opts.ExtraListWorkUnitPrefixes...)
+				var errs []error
+				for _, tc := range tcs {
+					got, err := repo.ListWorkUnits(tc.Prefix)
+					if err != nil {
+						errs = append(errs, fmt.Errorf("repo.ListWorkUnits(%q) = _, %v", tc.Prefix, err))
+						continue
+					}
+					slices.Sort(got)
+					slices.Sort(tc.Want)
+					if diff := cmp.Diff(tc.Want, got); diff != "" {
+						errs = append(errs, fmt.Errorf("repo.ListWorkUnits(%q) diff (-want +got)\n%s", tc.Prefix, diff))
+						continue
+					}
+				}
+				return errors.Join(errs...)
+			},
+			wantErr: false,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

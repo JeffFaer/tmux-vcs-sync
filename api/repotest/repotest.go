@@ -4,6 +4,7 @@ package repotest
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/JeffFaer/tmux-vcs-sync/api"
 )
@@ -44,6 +45,16 @@ func (repo *fakeRepo) RootDir() string {
 
 func (repo *fakeRepo) Current() (string, error) {
 	return repo.cur, nil
+}
+
+func (repo *fakeRepo) ListWorkUnits(prefix string) ([]string, error) {
+	var ret []string
+	for n := range repo.workUnits {
+		if strings.HasPrefix(n, prefix) {
+			ret = append(ret, n)
+		}
+	}
+	return ret, nil
 }
 
 func (repo *fakeRepo) New(workUnitName string) error {

@@ -143,6 +143,18 @@ func (repo *gitRepo) Current() (string, error) {
 	return cur, nil
 }
 
+func (repo *gitRepo) ListWorkUnits(prefix string) ([]string, error) {
+	args := []string{"branch", "--format=%(refname:short)", "--list"}
+	if prefix != "" {
+		args = append(args, prefix+"*")
+	}
+	stdout, err := repo.Command(args...).RunStdout()
+	if err != nil {
+		return nil, err
+	}
+	return strings.Split(stdout, "\n"), nil
+}
+
 func (repo *gitRepo) New(workUnitName string) error {
 	n, err := repo.defaultBranchName()
 	if err != nil {
