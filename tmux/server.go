@@ -275,3 +275,10 @@ func (srv *Server) resolveTargetSession(s TargetSession) (string, error) {
 func (srv *Server) Kill() error {
 	return srv.command("kill-server").Run()
 }
+
+func (srv *Server) SetOption(opt Option, val string) error {
+	if err := srv.command("set-option", "-s", string(opt), val).Run(); err != nil {
+		return fmt.Errorf("set-option -s %q %q: %w", opt, val, err)
+	}
+	return nil
+}
