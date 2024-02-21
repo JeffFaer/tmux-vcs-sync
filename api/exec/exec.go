@@ -23,6 +23,10 @@ func Lookup(name string) (Executable, error) {
 	return Executable(path), nil
 }
 
+type Commander interface {
+	Command(args ...string) *Command
+}
+
 type Executable string
 
 func (exe Executable) Command(args ...string) *Command {

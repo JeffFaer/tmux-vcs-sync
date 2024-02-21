@@ -23,12 +23,8 @@ func init() {
 	}
 }
 
-type commander interface {
-	Command(args ...string) *exec.Command
-}
-
 type git struct {
-	commander
+	exec.Commander
 }
 
 func (git) Name() string {

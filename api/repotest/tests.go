@@ -11,9 +11,20 @@ import (
 )
 
 type Options struct {
-	NoopRenameIsOK            bool
+	// It's okay for noop renames to succeed. The CLI command will likely fail
+	// because the tmux session already exists.
+	NoopRenameIsOK bool
+	// i.e. when asked to create a work unit and the name is already used, the
+	// VCS will implicitly drop the name on the old work unit and use the new
+	// name implicitly.
+	// Similar to noop rename, this is okay because the CLI command will likely
+	// fail because the tmux session already exists.
+	ImplicitlyRenamesWorkUnits bool
+
 	ExtraListWorkUnitNames    []string
 	ExtraListWorkUnitPrefixes []ListWorkUnitTestCase
+
+	Parallel bool
 }
 
 type ListWorkUnitTestCase struct {
@@ -69,7 +80,7 @@ func RepoTests(t *testing.T, repoCtor func(string) (api.Repository, error), opts
 				}
 				return repo.New(workUnit)
 			},
-			wantErr: true,
+			wantErr: !opts.ImplicitlyRenamesWorkUnits,
 		},
 		{
 			name: "CommitAfterNew",
@@ -156,7 +167,7 @@ func RepoTests(t *testing.T, repoCtor func(string) (api.Repository, error), opts
 				}
 				return repo.Rename(workUnitNames[0])
 			},
-			wantErr: true,
+			wantErr: !opts.ImplicitlyRenamesWorkUnits,
 		},
 		{
 			name: "Update",
@@ -283,6 +294,9 @@ func RepoTests(t *testing.T, repoCtor func(string) (api.Repository, error), opts
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if opts.Parallel {
+				t.Parallel()
+			}
 			repo, err := repoCtor(tc.name)
 			if err != nil {
 				t.Fatalf("Could not create repository: %v", err)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/JeffFaer/tmux-vcs-sync/api"
 	"github.com/JeffFaer/tmux-vcs-sync/api/exec"
+	"github.com/JeffFaer/tmux-vcs-sync/api/exec/exectest"
 	"github.com/JeffFaer/tmux-vcs-sync/api/repotest"
 	"github.com/kballard/go-shellquote"
 )
@@ -28,7 +29,7 @@ func newGit(t *testing.T) testGit {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return testGit{git{testGitCmd{t, exec}}}
+	return testGit{git{testGitCmd{exectest.NewTestCommander(t, exec)}}}
 }
 
 func (git testGit) newRepo(dir string, name string) (*gitRepo, error) {
@@ -47,28 +48,14 @@ func (git testGit) newRepo(dir string, name string) (*gitRepo, error) {
 }
 
 type testGitCmd struct {
-	t   testing.TB
-	git commander
+	git exec.Commander
 }
 
 func (git testGitCmd) Command(args ...string) *exec.Command {
 	args = append([]string{"-c", "user.name=test", "-c", "user.email=test@example.com", "-c", fmt.Sprintf("init.defaultBranch=%s", defaultBranchName)}, args...)
 	cmd := git.git.Command(args...)
 	cmd.Env = append(cmd.Environ(), "GIT_CONFIG_SYSTEM=/dev/null", "GIT_CONFIG_GLOBAL=/dev/null")
-	w := testingWriter{t: git.t}
-	cmd.Stdout = w
-	cmd.Stderr = w
 	return cmd
-}
-
-type testingWriter struct {
-	t testing.TB
-	exec.OverrideableWriter
-}
-
-func (w testingWriter) Write(b []byte) (int, error) {
-	w.t.Log(string(b))
-	return len(b), nil
 }
 
 func TestRepoAPI(t *testing.T) {
