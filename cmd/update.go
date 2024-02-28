@@ -11,6 +11,7 @@ import (
 	"github.com/JeffFaer/tmux-vcs-sync/api"
 	"github.com/JeffFaer/tmux-vcs-sync/tmux"
 	"github.com/JeffFaer/tmux-vcs-sync/tmux/state"
+	"github.com/kballard/go-shellquote"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +38,7 @@ var updateCommand = &cobra.Command{
 		if len(args) == 0 {
 			return update()
 		}
-		return updateTo(args[0])
+		return updateTo(state.ParseSessionNameWithoutKnownRepository(args[0]))
 	},
 }
 
@@ -53,24 +54,31 @@ func suggestWorkUnitNames(toComplete string) []string {
 			}
 		}
 	}
-	if repo, err := api.Registered.MaybeCurrentRepository(); err != nil {
+	cur, err := api.Registered.MaybeCurrentRepository()
+	if err != nil {
 		slog.Warn("Could not determine current repository.", "error", err)
 	} else {
-		n := state.NewRepoName(repo)
-		if _, ok := repos[n]; !ok {
-			repos[n] = repo
-		}
+		repos[state.NewRepoName(cur)] = cur
 	}
 
 	var suggestions []string
 	for name, repo := range repos {
-		wus, err := repo.ListWorkUnits(toComplete)
+		wus, err := repo.ListWorkUnits("")
 		if err != nil {
 			slog.Warn("Could not list work units.", "repo", name, "error", err)
+			continue
 		}
-		suggestions = append(suggestions, wus...)
+		for _, wu := range wus {
+			if repo != cur {
+				wu = state.NewSessionName(repo, wu).RepoString()
+			}
+			wu = shellquote.Join(wu)
+			suggestions = append(suggestions, wu)
+		}
 	}
-	suggestions = slices.DeleteFunc(suggestions, func(s string) bool { return !strings.HasPrefix(s, toComplete) })
+	suggestions = slices.DeleteFunc(suggestions, func(s string) bool {
+		return !strings.HasPrefix(s, toComplete)
+	})
 	return suggestions
 }
 
@@ -124,39 +132,26 @@ func updateTmux(srv *tmux.Server, st *state.State, repo api.Repository, workUnit
 	return srv.AttachOrSwitch(sesh.Target())
 }
 
-func updateTo(workUnitName string) error {
+func updateTo(sessionName state.SessionName) error {
 	srv, hasCurrentServer := tmux.CurrentServerOrDefault()
 	st, err := state.New(srv)
 	if err != nil {
 		return err
 	}
 
-	var repo api.Repository
-	if cur, err1 := existsInCurrentRepo(workUnitName); err1 == nil && cur != nil {
-		repo = cur
-	} else {
-		var err2 error
-		repo, err2 = st.MaybeFindRepository(workUnitName)
-		if err2 != nil {
-			return errors.Join(err1, err2)
-		}
-		if repo == nil {
-			return errors.Join(err1, fmt.Errorf("could not find any repository that contains work unit %q", workUnitName))
-		}
-		if err1 != nil {
-			slog.Warn("An error occurred with the current repository.", "error", err1)
-		}
+	repo, err := findRepository(st, sessionName)
+	if err != nil {
+		return err
 	}
-	slog.Info("Found repository for requested work unit.", "name", state.NewSessionName(repo, workUnitName))
 
 	var update bool
 
 	// Update to the work unit.
 	if cur, err := repo.Current(); err != nil {
 		return fmt.Errorf("couldn't check repo's current %s: %w", repo.VCS().WorkUnitName(), err)
-	} else if cur != workUnitName {
-		slog.Info("Updating repository.", "current", cur, "want", workUnitName)
-		if err := repo.Update(workUnitName); err != nil {
+	} else if cur != sessionName.WorkUnit {
+		slog.Info("Updating repository.", "current", cur, "want", sessionName.WorkUnit)
+		if err := repo.Update(sessionName.WorkUnit); err != nil {
 			return err
 		}
 		update = true
@@ -167,7 +162,7 @@ func updateTo(workUnitName string) error {
 	if !hasCurrentServer {
 		// Not currently attached to tmux.
 		needsSwitch = true
-	} else if sesh := st.Session(repo, workUnitName); sesh == nil {
+	} else if sesh := st.Session(repo, sessionName.WorkUnit); sesh == nil {
 		// Session doesn't exist.
 		needsSwitch = true
 	} else if cur, err := tmux.MaybeCurrentSession(); err != nil {
@@ -177,7 +172,7 @@ func updateTo(workUnitName string) error {
 		needsSwitch = true
 	}
 	if needsSwitch {
-		if err := updateTmux(srv, st, repo, workUnitName); err != nil {
+		if err := updateTmux(srv, st, repo, sessionName.WorkUnit); err != nil {
 			return err
 		}
 		update = true
@@ -193,6 +188,28 @@ func updateTo(workUnitName string) error {
 	return nil
 }
 
+func findRepository(st *state.State, n state.SessionName) (api.Repository, error) {
+	var err1, err2 error
+	if n.RepoName.Zero() {
+		cur, err1 := existsInCurrentRepo(n.WorkUnit)
+		if err1 == nil && cur != nil {
+			return cur, nil
+		}
+	}
+	repo, err2 := st.MaybeFindRepository(n)
+	if err2 != nil {
+		return nil, errors.Join(err1, err2)
+	}
+	if repo == nil {
+		return nil, errors.Join(err1, fmt.Errorf("could not find repository %v", n))
+	}
+	if err1 != nil {
+		slog.Warn("An error occurred with the current repository.", "error", err1)
+	}
+	slog.Info("Found repository for requested work unit.", "name", state.NewSessionName(repo, n.WorkUnit))
+	return repo, nil
+}
+
 func existsInCurrentRepo(workUnitName string) (api.Repository, error) {
 	repo, err := api.Registered.MaybeCurrentRepository()
 	if err != nil {
@@ -201,11 +218,9 @@ func existsInCurrentRepo(workUnitName string) (api.Repository, error) {
 	if repo == nil {
 		return nil, nil
 	}
-	ok, err := repo.Exists(workUnitName)
-	if err != nil {
+	if ok, err := repo.Exists(workUnitName); err != nil {
 		return nil, err
-	}
-	if !ok {
+	} else if !ok {
 		return nil, nil
 	}
 	return repo, nil

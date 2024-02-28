@@ -158,10 +158,9 @@ func (st *State) RenameSession(repo api.Repository, old, new string) error {
 func (st *State) PruneSessions() error {
 	validWorkUnits := make(map[SessionName]bool)
 	errRepos := make(map[RepoName]bool)
-	for _, repo := range st.Repositories() {
+	for n, repo := range st.repos {
 		wus, err := repo.ListWorkUnits("")
 		if err != nil {
-			n := NewRepoName(repo)
 			errRepos[n] = true
 			slog.Warn("Could not list work units for repository.", "repo", n)
 			continue
@@ -237,23 +236,56 @@ func (st *State) updateSessionNames() error {
 	return errors.Join(errs...)
 }
 
-// MaybeFindRepository attempts to find an api.Repository that claims the given
-// work unit exists.
+// MaybeFindRepository attempts to find an api.Repository for the given
+// SessionName.
+//
+// SessionName.RepoName is optional. If SessionName.RepoName.Zero, this method
+// checks all known api.Repositories to see if any of them claim that
+// SessionName.WorkUnit exists.
+// If it is set, and both SessionName.RepoName.VCS and SessionName.RepoName.Repo
+// are set, this method will find an api.Repository whose api.Repository.Name
+// and api.Repository.VCS.Name matches the values. If only
+// SessionName.RepoName.Repo is set, this method will check all known
+// api.Repositories whose api.Repository.Names match to see if they claim that
+// SessionName.WorkUnit exists.
+//
 // Returns an error if multiple api.Repositories claim that the given work unit
 // exists.
+//
 // Returns nil, nil if no such api.Repository exists.
-func (st *State) MaybeFindRepository(workUnitName string) (api.Repository, error) {
-	repo, err := api.MaybeFindRepository(st.Repositories(), func(repo api.Repository) (api.Repository, error) {
-		ok, err := repo.Exists(workUnitName)
-		if err != nil {
-			return nil, err
-		} else if ok {
-			return repo, nil
+func (st *State) MaybeFindRepository(n SessionName) (api.Repository, error) {
+	var repos []api.Repository
+	if !n.RepoName.Zero() {
+		if n.RepoName.Repo == "" {
+			return nil, fmt.Errorf("SessionName has VCS set, but not Repo: %v", n)
 		}
-		return nil, nil
+		if n.RepoName.VCS != "" {
+			repo, ok := st.repos[n.RepoName]
+			if !ok {
+				return nil, nil
+			}
+			repos = append(repos, repo)
+		} else {
+			for m, repo := range st.repos {
+				if n.Repo == m.Repo {
+					repos = append(repos, repo)
+				}
+			}
+		}
+	} else {
+		repos = st.Repositories()
+	}
+
+	repo, err := api.MaybeFindRepository(repos, func(repo api.Repository) (api.Repository, error) {
+		if ok, err := repo.Exists(n.WorkUnit); err != nil {
+			return nil, err
+		} else if !ok {
+			return nil, nil
+		}
+		return repo, nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("work unit %q: %w", workUnitName, err)
+		return nil, fmt.Errorf("work unit %v: %w", n, err)
 	}
 	return repo, nil
 }
@@ -266,6 +298,17 @@ func NewRepoName(repo api.Repository) RepoName {
 	return RepoName{VCS: repo.VCS().Name(), Repo: repo.Name()}
 }
 
+func (n RepoName) Zero() bool {
+	return n == RepoName{}
+}
+
+func (n RepoName) String() string {
+	if n.VCS != "" {
+		return fmt.Sprintf("%s>%s", n.VCS, n.Repo)
+	}
+	return n.Repo
+}
+
 func (n RepoName) LogValue() slog.Value {
 	return slog.GroupValue(slog.String("vcs", n.VCS), slog.String("repo", n.Repo))
 }
@@ -276,28 +319,43 @@ type SessionName struct {
 }
 
 func ParseSessionName(repo api.Repository, tmuxSessionName string) SessionName {
-	n := SessionName{RepoName: NewRepoName(repo)}
-
-	sp := strings.SplitN(tmuxSessionName, ">", 3)
-	switch len(sp) {
-	case 1:
-		n.WorkUnit = sp[0]
-	case 2:
-		if n.Repo != sp[0] {
-			slog.Warn("Session name does not agree with repository.", "session_name", tmuxSessionName, "repo", n.Repo)
+	n := ParseSessionNameWithoutKnownRepository(tmuxSessionName)
+	if m := NewRepoName(repo); n.RepoName != m {
+		if (n.RepoName.VCS != "" && n.RepoName.VCS != m.VCS) || (n.RepoName.Repo != "" && n.RepoName.Repo != m.Repo) {
+			slog.Warn("Session name does not agree with repository.", "session_name", tmuxSessionName, "repo", m)
 		}
-		n.WorkUnit = sp[1]
-	default:
-		if n.VCS != sp[1] || n.Repo != sp[1] {
-			slog.Warn("Session name does not agree with repository.", "session_name", tmuxSessionName, "vcs", n.VCS, "repo", n.Repo)
-		}
-		n.WorkUnit = sp[2]
+		n.RepoName = m
 	}
 	return n
 }
 
+func ParseSessionNameWithoutKnownRepository(tmuxSessionName string) SessionName {
+	sp := strings.SplitN(tmuxSessionName, ">", 3)
+	switch len(sp) {
+	case 1:
+		return SessionName{WorkUnit: sp[0]}
+	case 2:
+		return SessionName{RepoName: RepoName{Repo: sp[0]}, WorkUnit: sp[1]}
+	default:
+		return SessionName{RepoName: RepoName{VCS: sp[0], Repo: sp[1]}, WorkUnit: sp[2]}
+	}
+}
+
 func NewSessionName(repo api.Repository, workUnitName string) SessionName {
 	return SessionName{NewRepoName(repo), workUnitName}
+}
+
+func (n SessionName) Zero() bool {
+	return n == SessionName{}
+}
+
+func (n SessionName) String() string {
+	if n.VCS != "" {
+		return fmt.Sprintf("%s>%s>%s", n.VCS, n.Repo, n.WorkUnit)
+	} else if n.Repo != "" {
+		return n.RepoString()
+	}
+	return n.WorkUnitString()
 }
 
 func (n SessionName) RepoString() string {
