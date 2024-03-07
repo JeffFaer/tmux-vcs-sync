@@ -201,7 +201,7 @@ func (st *State) PruneSessions() error {
 
 	for _, sesh := range toRemove {
 		n := invalidSessions[sesh]
-		slog.Info("Killing session.", "session_id", sesh.ID, "name", n)
+		slog.Warn("Killing session.", "session_id", sesh.ID, "name", n)
 		if err := sesh.Kill(); err != nil {
 			return err
 		}
