@@ -132,7 +132,7 @@ func (st *State) NewSession(repo api.Repository, workUnitName string) (*tmux.Ses
 // Returns an error if the "old" tmux session doesn't exist or if there's
 // already a "new" tmux session.
 func (st *State) RenameSession(repo api.Repository, old, new string) error {
-	oldName := NewSessionName(repo, old)
+	oldName := ParseSessionName(repo, old)
 	sesh, ok := st.sessions[oldName]
 	if !ok {
 		return fmt.Errorf("tmux session %q does not exist", st.sessionNameString(oldName))
