@@ -30,7 +30,7 @@ type Server interface {
 	ListClients() ([]Client, error)
 
 	// NewSession creates a new session in this tmux server.
-	NewSession(opts ...NewSessionOption) (Session, error)
+	NewSession(NewSessionOptions) (Session, error)
 	// AttachOrSwitch either attaches the controlling terminal to the given TargetSession or switches the current tmux client to the TargetSession.
 	AttachOrSwitch(Session) error
 
@@ -38,37 +38,23 @@ type Server interface {
 	Kill() error
 }
 
-// NewSessionOption affects how NewSession creates sessions.
-type NewSessionOption func(*newSessionOptions)
-
-type newSessionOptions struct {
-	name     string
-	startDir string
+// NewSessionOptions affects how NewSession creates sessions.
+type NewSessionOptions struct {
+	// Name is the optional initial name for the session.
+	Name string
+	// StartDir is the optional initial working directory for the session.
+	StartDir string
 }
 
-func (opts newSessionOptions) args() []string {
+func (opts NewSessionOptions) args() []string {
 	var res []string
-	if opts.name != "" {
-		res = append(res, []string{"-s", opts.name}...)
+	if opts.Name != "" {
+		res = append(res, []string{"-s", opts.Name}...)
 	}
-	if opts.startDir != "" {
-		res = append(res, []string{"-c", opts.startDir}...)
+	if opts.StartDir != "" {
+		res = append(res, []string{"-c", opts.StartDir}...)
 	}
 	return res
-}
-
-// NewSessionName creates the new session with the given initial name.
-func NewSessionName(name string) NewSessionOption {
-	return func(opts *newSessionOptions) {
-		opts.name = name
-	}
-}
-
-// NewSessionStartDirectory creates the new session with the given initial start directory.
-func NewSessionStartDirectory(dir string) NewSessionOption {
-	return func(opts *newSessionOptions) {
-		opts.startDir = dir
-	}
 }
 
 type Session interface {

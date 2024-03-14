@@ -62,8 +62,8 @@ func randomString() string {
 	return base58.Encode(b)
 }
 
-func (srv TestServer) MustNewSession(opts ...NewSessionOption) TestSession {
-	sesh, err := srv.NewSession(opts...)
+func (srv TestServer) MustNewSession(opts NewSessionOptions) TestSession {
+	sesh, err := srv.NewSession(opts)
 	if err != nil {
 		srv.t.Fatal(err)
 	}
@@ -175,9 +175,9 @@ func TestServer_Sessions(t *testing.T) {
 		t.Errorf("New tmux server has %d sessions, expected 0", len(sessions))
 	}
 
-	a := srv.MustNewSession(NewSessionName("a"))
-	b := srv.MustNewSession(NewSessionName("b"))
-	c := srv.MustNewSession(NewSessionName("c"))
+	a := srv.MustNewSession(NewSessionOptions{Name: "a"})
+	b := srv.MustNewSession(NewSessionOptions{Name: "b"})
+	c := srv.MustNewSession(NewSessionOptions{Name: "c"})
 
 	sessions = srv.MustListSessions()
 	if diff := cmp.Diff([]TestSession{a, b, c}, sessions, tmuxCmpOpt); diff != "" {
@@ -194,8 +194,8 @@ func TestServer_Sessions(t *testing.T) {
 
 func TestServer_AttachOrSwitch(t *testing.T) {
 	srv := NewServerForTesting(t)
-	a := srv.MustNewSession(NewSessionName("a"))
-	b := srv.MustNewSession(NewSessionName("b"))
+	a := srv.MustNewSession(NewSessionOptions{Name: "a"})
+	b := srv.MustNewSession(NewSessionOptions{Name: "b"})
 
 	if c := srv.MustListClients(); len(c) != 0 {
 		t.Errorf("Server already has %d clients:\n%v", len(c), c)

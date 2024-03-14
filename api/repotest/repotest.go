@@ -9,14 +9,24 @@ import (
 	"github.com/JeffFaer/tmux-vcs-sync/api"
 )
 
-type fakeVCS struct{}
+// NewVCS creates a new, fake VersionControlSystem that requires all
+// repositories to be in the given directory.
+func NewVCS(dir string) api.VersionControlSystem {
+	return fakeVCS{dir}
+}
 
-var VCS = fakeVCS{}
+type fakeVCS struct {
+	dir string
+}
 
-func (fakeVCS) Name() string         { return "fake" }
+func (vcs fakeVCS) Name() string     { return fmt.Sprintf("fake(%s)", vcs.dir) }
 func (fakeVCS) WorkUnitName() string { return "work unit" }
-func (fakeVCS) Repository(dir string) (api.Repository, error) {
+func (vcs fakeVCS) Repository(dir string) (api.Repository, error) {
+	if !strings.HasPrefix(dir, vcs.dir) {
+		return nil, nil
+	}
 	return &fakeRepo{
+		vcs:       vcs,
 		name:      filepath.Base(dir),
 		dir:       dir,
 		cur:       "root",
@@ -25,14 +35,15 @@ func (fakeVCS) Repository(dir string) (api.Repository, error) {
 }
 
 type fakeRepo struct {
+	vcs       api.VersionControlSystem
 	name, dir string
 
 	cur       string
 	workUnits map[string]string
 }
 
-func (*fakeRepo) VCS() api.VersionControlSystem {
-	return VCS
+func (repo *fakeRepo) VCS() api.VersionControlSystem {
+	return repo.vcs
 }
 
 func (repo *fakeRepo) Name() string {
