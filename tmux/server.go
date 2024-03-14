@@ -174,13 +174,9 @@ func (srv *server) ListClients() ([]Client, error) {
 	return res, nil
 }
 
-func (srv *server) NewSession(opts ...NewSessionOption) (Session, error) {
-	opt := &newSessionOptions{}
-	for _, o := range opts {
-		o(opt)
-	}
+func (srv *server) NewSession(opts NewSessionOptions) (Session, error) {
 	args := []string{"new-session", "-d", "-P", "-F", string(SessionID)}
-	args = append(args, opt.args()...)
+	args = append(args, opts.args()...)
 	newSession := srv.command(args...)
 	newSession.Stdin = os.Stdin // tmux wants a tty.
 	stdout, err := newSession.RunStdout()

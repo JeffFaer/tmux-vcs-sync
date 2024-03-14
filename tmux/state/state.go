@@ -23,6 +23,10 @@ type State struct {
 }
 
 func New(srv tmux.Server) (*State, error) {
+	return newState(srv, api.Registered)
+}
+
+func newState(srv tmux.Server, vcs api.VersionControlSystems) (*State, error) {
 	sessions, err := srv.ListSessions()
 	if err != nil {
 		return nil, err
@@ -52,7 +56,7 @@ func New(srv tmux.Server) (*State, error) {
 		repo, ok := reposByDir[path]
 		if !ok {
 			var err error
-			repo, err = api.Registered.MaybeFindRepository(path)
+			repo, err = vcs.MaybeFindRepository(path)
 			if err != nil {
 				logger.Warn("Error while checking for repository in tmux session.", "error", err)
 				continue
@@ -113,7 +117,7 @@ func (st *State) NewSession(repo api.Repository, workUnitName string) (tmux.Sess
 
 	n := st.sessionNameString(name)
 	slog.Info("Creating tmux session.", "name", name, "session_name", n)
-	sesh, err := st.srv.NewSession(tmux.NewSessionName(n), tmux.NewSessionStartDirectory(repo.RootDir()))
+	sesh, err := st.srv.NewSession(tmux.NewSessionOptions{Name: n, StartDir: repo.RootDir()})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tmux session %q: %w", n, err)
 	}
