@@ -10,21 +10,37 @@ import (
 	"github.com/JeffFaer/tmux-vcs-sync/api/exec"
 )
 
+// Equal determines if two servers equivalent, based on PID.
+func SameServer(a, b Server) bool {
+	if a == b {
+		return true
+	}
+	pid1, err := a.PID()
+	if err != nil {
+		return false
+	}
+	pid2, err := b.PID()
+	if err != nil {
+		return false
+	}
+	return pid1 == pid2
+}
+
 // Server represents a tmux server that exists at a particular Socket.
 // If Socket is unset, we will use the default tmux socket.
-type Server struct {
+type server struct {
 	opts serverOptions
 }
 
 // NewServer creates a new server for the given socket.
 // Note: This doesn't actually create the server yet. You will need to create at
 // least one session for the server to be active.
-func NewServer(opts ...ServerOption) *Server {
+func NewServer(opts ...ServerOption) *server {
 	opt := serverOptions{}
 	for _, o := range opts {
 		o(&opt)
 	}
-	return &Server{opt}
+	return &server{opt}
 }
 
 type ServerOption func(*serverOptions)
@@ -63,7 +79,7 @@ func (opts serverOptions) args() []string {
 
 // CurrentServer returns a server if this program is running within a tmux
 // server.
-func CurrentServer() (*Server, error) {
+func CurrentServer() (Server, error) {
 	srv := MaybeCurrentServer()
 	if srv == nil {
 		return nil, errNotTmux
@@ -73,7 +89,7 @@ func CurrentServer() (*Server, error) {
 
 // MaybeCurrentServer returns a server if this program is running within a tmux
 // server. If it's not, it returns nil.
-func MaybeCurrentServer() *Server {
+func MaybeCurrentServer() Server {
 	srv := maybeCurrentServer()
 	if srv != nil {
 		slog.Info("Found tmux server.", "server", srv)
@@ -82,24 +98,24 @@ func MaybeCurrentServer() *Server {
 }
 
 // maybeCurrentServer is the same as MaybeCurrentServer, except it doesn't log.
-func maybeCurrentServer() *Server {
+func maybeCurrentServer() *server {
 	sp := strings.SplitN(os.Getenv("TMUX"), ",", 2)
 	if socket := sp[0]; socket != "" {
-		return &Server{serverOptions{socketPath: socket}}
+		return &server{serverOptions{socketPath: socket}}
 	}
 	return nil
 }
 
 // CurrentServerOrDefault either returns the CurrentServer, or the default server.
-func CurrentServerOrDefault() (*Server, bool) {
+func CurrentServerOrDefault() (Server, bool) {
 	srv := MaybeCurrentServer()
 	if srv == nil {
-		return &Server{}, false
+		return &server{}, false
 	}
 	return srv, true
 }
 
-func (srv *Server) LogValue() slog.Value {
+func (srv *server) LogValue() slog.Value {
 	switch {
 	case srv.opts.socketPath != "":
 		return slog.GroupValue(slog.String("socket", srv.opts.socketPath))
@@ -110,13 +126,12 @@ func (srv *Server) LogValue() slog.Value {
 	}
 }
 
-func (srv *Server) command(args ...string) *exec.Command {
+func (srv *server) command(args ...string) *exec.Command {
 	args = append(srv.opts.args(), args...)
 	return tmux.Command(args...)
 }
 
-// PID returns the process ID of the server, if it's currently active.
-func (srv *Server) PID() (int, error) {
+func (srv *server) PID() (int, error) {
 	pid, err := srv.command("display-message", "-p", "-F", "#{pid}").RunStdout()
 	if err != nil {
 		return 0, err
@@ -124,25 +139,7 @@ func (srv *Server) PID() (int, error) {
 	return strconv.Atoi(pid)
 }
 
-// Equal determines if this Server is the same as the other Server, based on PID.
-func (srv *Server) Equal(other *Server) bool {
-	if srv == other {
-		return true
-	}
-	pid1, err := srv.PID()
-	if err != nil {
-		return false
-	}
-	pid2, err := other.PID()
-	if err != nil {
-		return false
-	}
-	return pid1 == pid2
-}
-
-// ListSessions lists the sessions that exist in this tmux server.
-// This method will also lookup and cache the given properties.
-func (srv *Server) ListSessions() ([]*Session, error) {
+func (srv *server) ListSessions() ([]Session, error) {
 	stdout, stderr, err := srv.command("list-sessions", "-F", string(SessionID)).RunOutput()
 	if err != nil {
 		if
@@ -155,14 +152,14 @@ func (srv *Server) ListSessions() ([]*Session, error) {
 		fmt.Fprintln(os.Stderr, stderr)
 		return nil, err
 	}
-	var res []*Session
+	var res []Session
 	for _, id := range strings.Split(stdout, "\n") {
-		res = append(res, &Session{srv, id})
+		res = append(res, &session{srv, id})
 	}
 	return res, nil
 }
 
-func (srv *Server) ListClients() ([]*Client, error) {
+func (srv *server) ListClients() ([]Client, error) {
 	stdout, err := srv.command("list-clients", "-F", string(ClientTTY)).RunStdout()
 	if err != nil {
 		return nil, err
@@ -170,15 +167,14 @@ func (srv *Server) ListClients() ([]*Client, error) {
 	if stdout == "" {
 		return nil, nil
 	}
-	var res []*Client
+	var res []Client
 	for _, tty := range strings.Split(stdout, "\n") {
-		res = append(res, &Client{srv: srv, TTY: tty})
+		res = append(res, &client{srv, tty})
 	}
 	return res, nil
 }
 
-// NewSession creates a new session in this tmux server.
-func (srv *Server) NewSession(opts ...NewSessionOption) (*Session, error) {
+func (srv *server) NewSession(opts ...NewSessionOption) (Session, error) {
 	opt := &newSessionOptions{}
 	for _, o := range opts {
 		o(opt)
@@ -191,45 +187,13 @@ func (srv *Server) NewSession(opts ...NewSessionOption) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Session{Server: srv, ID: stdout}, nil
+	return &session{srv, stdout}, nil
 }
 
-type newSessionOptions struct {
-	name     string
-	startDir string
-}
-
-func (opts newSessionOptions) args() []string {
-	var res []string
-	if opts.name != "" {
-		res = append(res, []string{"-s", opts.name}...)
+func (srv *server) AttachOrSwitch(s Session) error {
+	if !SameServer(srv, s.Server()) {
+		return fmt.Errorf("target session does not exist in this server")
 	}
-	if opts.startDir != "" {
-		res = append(res, []string{"-c", opts.startDir}...)
-	}
-	return res
-}
-
-// NewSessionOption affects how NewSession creates sessions.
-type NewSessionOption func(*newSessionOptions)
-
-// NewSessionName creates the new session with the given initial name.
-func NewSessionName(name string) NewSessionOption {
-	return func(opts *newSessionOptions) {
-		opts.name = name
-	}
-}
-
-// NewSessionStartDirectory creates the new session with the given initial start directory.
-func NewSessionStartDirectory(dir string) NewSessionOption {
-	return func(opts *newSessionOptions) {
-		opts.startDir = dir
-	}
-}
-
-// AttachOrSwitch either attaches a new client connected to the given
-// TargetSession, or switches the current client to the TargetSession.
-func (srv *Server) AttachOrSwitch(s TargetSession) error {
 	var cmd *exec.Command
 	var err error
 	if os.Getenv("TMUX") != "" {
@@ -243,39 +207,18 @@ func (srv *Server) AttachOrSwitch(s TargetSession) error {
 	return cmd.Run()
 }
 
-func (srv *Server) attachCommand(s TargetSession) (*exec.Command, error) {
-	target, err := srv.resolveTargetSession(s)
-	if err != nil {
-		return nil, err
-	}
-	cmd := srv.command("attach-session", "-t", target)
+func (srv *server) attachCommand(s Session) (*exec.Command, error) {
+	cmd := srv.command("attach-session", "-t", s.ID())
 	cmd.Stdin = os.Stdin // tmux wants a tty.
 	return cmd, nil
 }
 
-func (srv *Server) switchCommand(s TargetSession) (*exec.Command, error) {
-	target, err := srv.resolveTargetSession(s)
-	if err != nil {
-		return nil, err
-	}
-	cmd := srv.command("switch-client", "-t", target)
+func (srv *server) switchCommand(s Session) (*exec.Command, error) {
+	cmd := srv.command("switch-client", "-t", s.ID())
 	cmd.Stdin = os.Stdin // tmux wants a tty.
 	return cmd, nil
 }
 
-func (srv *Server) resolveTargetSession(s TargetSession) (string, error) {
-	switch {
-	case s.sesh != nil:
-		if !srv.Equal(s.sesh.Server) {
-			return "", fmt.Errorf("target session does not exist in this server")
-		}
-		return s.sesh.ID, nil
-	default:
-		panic("unhandled TargetSession case")
-	}
-}
-
-// Kill kills this server.
-func (srv *Server) Kill() error {
+func (srv *server) Kill() error {
 	return srv.command("kill-server").Run()
 }

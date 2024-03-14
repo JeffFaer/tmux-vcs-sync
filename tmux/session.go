@@ -6,20 +6,20 @@ import (
 	"strings"
 )
 
-// TargetSession represents the tmux flag value target-session.
-type TargetSession struct {
-	sesh *Session
+// Equal determines if two sessions are equivalent by checking they have the same ID and belong to the same Server.
+func SameSession(a, b Session) bool {
+	return a.ID() == b.ID() && SameServer(a.Server(), b.Server())
 }
 
 // Session represents a tmux session on a particular server.
-type Session struct {
-	Server *Server
-	ID     string
+type session struct {
+	srv *server
+	id  string
 }
 
 // CurrentSession returns a Session if this program is being executed inside
 // tmux.
-func CurrentSession() (*Session, error) {
+func CurrentSession() (Session, error) {
 	sesh, err := MaybeCurrentSession()
 	if err != nil {
 		return nil, err
@@ -34,7 +34,7 @@ func CurrentSession() (*Session, error) {
 // inside tmux. If it's not being executed inside tmux, returns nil, nil.
 // An error may occur if we can't determine the session ID from the running
 // tmux server.
-func MaybeCurrentSession() (*Session, error) {
+func MaybeCurrentSession() (Session, error) {
 	srv := maybeCurrentServer()
 	if srv == nil {
 		return nil, nil
@@ -46,18 +46,18 @@ func MaybeCurrentSession() (*Session, error) {
 	}
 
 	slog.Info("Found current tmux session.", "server", srv, "session", id)
-	return &Session{srv, id}, nil
+	return &session{srv, id}, nil
 }
 
-func (s *Session) Target() TargetSession {
-	return TargetSession{sesh: s}
+func (s *session) Server() Server {
+	return s.srv
 }
 
-func (s *Session) Equal(other *Session) bool {
-	return s.ID == other.ID && s.Server.Equal(other.Server)
+func (s *session) ID() string {
+	return s.id
 }
 
-func (s *Session) Property(prop SessionProperty) (string, error) {
+func (s *session) Property(prop SessionProperty) (string, error) {
 	props, err := s.Properties(prop)
 	if err != nil {
 		return "", err
@@ -66,41 +66,32 @@ func (s *Session) Property(prop SessionProperty) (string, error) {
 }
 
 // Properties fetches properties about a session.
-func (s *Session) Properties(props ...SessionProperty) (map[SessionProperty]string, error) {
+func (s *session) Properties(props ...SessionProperty) (map[SessionProperty]string, error) {
 	res, err := properties(props, func(keys []string) ([]string, error) {
-		stdout, err := s.Server.command("display-message", "-t", s.ID, "-p", strings.Join(keys, "\n")).RunStdout()
+		stdout, err := s.srv.command("display-message", "-t", s.id, "-p", strings.Join(keys, "\n")).RunStdout()
 		if err != nil {
 			return nil, err
 		}
 		return strings.Split(stdout, "\n"), nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("session %q: %w", s.ID, err)
+		return nil, fmt.Errorf("session %q: %w", s.id, err)
 	}
 	return res, nil
 }
 
-type SessionProperty string
-
-const (
-	SessionID   SessionProperty = "#{session_id}"
-	SessionName SessionProperty = "#{session_name}"
-	SessionPath SessionProperty = "#{session_path}"
-)
-
-func (s *Session) Rename(name string) error {
-	err := s.Server.command("rename-session", "-t", s.ID, name).Run()
+func (s *session) Rename(name string) error {
+	err := s.srv.command("rename-session", "-t", s.id, name).Run()
 	if err != nil {
-		return fmt.Errorf("could not rename session %q to %q: %w", s.ID, name, err)
+		return fmt.Errorf("could not rename session %q to %q: %w", s.ID(), name, err)
 	}
 	return nil
 }
 
-// Kill kills this session.
-func (s *Session) Kill() error {
-	err := s.Server.command("kill-session", "-t", s.ID).Run()
+func (s *session) Kill() error {
+	err := s.srv.command("kill-session", "-t", s.id).Run()
 	if err != nil {
-		return fmt.Errorf("could not kill session %q: %w", s.ID, err)
+		return fmt.Errorf("could not kill session %q: %w", s.ID(), err)
 	}
 	return nil
 }

@@ -51,8 +51,8 @@ func newWorkUnit(workUnitName string, ctor workUnitCtor) error {
 	if err != nil {
 		return err
 	}
-	if err := srv.AttachOrSwitch(sesh.Target()); err != nil {
-		return fmt.Errorf("failed to attach to newly created session %q: %w", sesh.ID, err)
+	if err := srv.AttachOrSwitch(sesh); err != nil {
+		return fmt.Errorf("failed to attach to newly created session %q: %w", sesh.ID(), err)
 	}
 	return nil
 }

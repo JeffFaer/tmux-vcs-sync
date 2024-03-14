@@ -31,7 +31,7 @@ func rename(newName string) error {
 	if err != nil {
 		return err
 	}
-	state, err := state.New(sesh.Server)
+	state, err := state.New(sesh.Server())
 	if err != nil {
 		return err
 	}
