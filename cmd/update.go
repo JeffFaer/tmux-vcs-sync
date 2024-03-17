@@ -42,15 +42,13 @@ var updateCommand = &cobra.Command{
 }
 
 func suggestWorkUnitNames(toComplete string) []string {
-	repos := make(map[state.RepoName]api.Repository)
+	var repos map[state.RepoName]api.Repository
 	if srv := tmux.MaybeCurrentServer(); srv != nil {
 		st, err := state.New(srv)
 		if err != nil {
 			slog.Warn("Could not determine repositories from tmux server.", "server", srv, "error", err)
 		} else {
-			for _, repo := range st.Repositories() {
-				repos[state.NewRepoName(repo)] = repo
-			}
+			repos = st.Repositories()
 		}
 	}
 	if repo, err := api.Registered.MaybeCurrentRepository(); err != nil {

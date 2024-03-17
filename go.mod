@@ -13,6 +13,7 @@ require (
 	github.com/mr-tron/base58 v1.2.0
 	github.com/phsym/console-slog v0.3.1
 	github.com/spf13/cobra v1.8.0
+	golang.org/x/exp v0.0.0-20240314144324-c7f7c6466f7f
 )
 
 require (

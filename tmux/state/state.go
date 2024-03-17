@@ -10,6 +10,7 @@ import (
 
 	"github.com/JeffFaer/tmux-vcs-sync/api"
 	"github.com/JeffFaer/tmux-vcs-sync/tmux"
+	expmaps "golang.org/x/exp/maps"
 )
 
 type State struct {
@@ -89,12 +90,8 @@ func (st *State) Sessions() map[WorkUnitName]tmux.Session {
 }
 
 // Repositories returns a representative example for each known RepoName.
-func (st *State) Repositories() []api.Repository {
-	var repos []api.Repository
-	for _, repo := range st.repos {
-		repos = append(repos, repo)
-	}
-	return repos
+func (st *State) Repositories() map[RepoName]api.Repository {
+	return maps.Clone(st.repos)
 }
 
 // Session determines if a tmux session for the given work unit exists.
@@ -111,11 +108,11 @@ func (st *State) Session(repo api.Repository, workUnitName string) tmux.Session 
 // Returns an error if the session already exists.
 func (st *State) NewSession(repo api.Repository, workUnitName string) (tmux.Session, error) {
 	name := NewWorkUnitName(repo, workUnitName)
+	n := st.sessionName(name)
 	if _, ok := st.sessions[name]; ok {
-		return nil, fmt.Errorf("tmux session %q already exists", st.sessionName(name))
+		return nil, fmt.Errorf("tmux session %q already exists", n)
 	}
 
-	n := st.sessionName(name)
 	slog.Info("Creating tmux session.", "name", name, "session_name", n)
 	sesh, err := st.srv.NewSession(tmux.NewSessionOptions{Name: n, StartDir: repo.RootDir()})
 	if err != nil {
@@ -162,10 +159,9 @@ func (st *State) RenameSession(repo api.Repository, old, new string) error {
 func (st *State) PruneSessions() error {
 	validWorkUnits := make(map[WorkUnitName]bool)
 	errRepos := make(map[RepoName]bool)
-	for _, repo := range st.Repositories() {
+	for n, repo := range st.repos {
 		wus, err := repo.List("")
 		if err != nil {
-			n := NewRepoName(repo)
 			errRepos[n] = true
 			slog.Warn("Could not list work units for repository.", "repo", n, "error", err)
 			continue
@@ -247,7 +243,7 @@ func (st *State) updateSessionNames() error {
 // exists.
 // Returns nil, nil if no such api.Repository exists.
 func (st *State) MaybeFindRepository(workUnitName string) (api.Repository, error) {
-	repo, err := api.MaybeFindRepository(st.Repositories(), func(repo api.Repository) (api.Repository, error) {
+	repo, err := api.MaybeFindRepository(expmaps.Values(st.repos), func(repo api.Repository) (api.Repository, error) {
 		ok, err := repo.Exists(workUnitName)
 		if err != nil {
 			return nil, err
