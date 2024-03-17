@@ -42,7 +42,7 @@ func TestNew(t *testing.T) {
 			},
 
 			want: simplifiedState{
-				Sessions: []SessionName{
+				WorkUnits: []WorkUnitName{
 					{RepoName: RepoName{Repo: "repo"}, WorkUnit: "foo"},
 					{RepoName: RepoName{Repo: "repo"}, WorkUnit: "bar"},
 				},
@@ -61,7 +61,7 @@ func TestNew(t *testing.T) {
 			},
 
 			want: simplifiedState{
-				Sessions: []SessionName{
+				WorkUnits: []WorkUnitName{
 					{RepoName: RepoName{Repo: "repo"}, WorkUnit: "foo"},
 				},
 				UnqualifiedRepos: []string{"repo"},
@@ -79,7 +79,7 @@ func TestNew(t *testing.T) {
 			},
 
 			want: simplifiedState{
-				Sessions: []SessionName{
+				WorkUnits: []WorkUnitName{
 					{RepoName: RepoName{Repo: "repo1"}, WorkUnit: "foo"},
 					{RepoName: RepoName{Repo: "repo2"}, WorkUnit: "bar"},
 				},
@@ -98,7 +98,7 @@ func TestNew(t *testing.T) {
 			},
 
 			want: simplifiedState{
-				Sessions: []SessionName{
+				WorkUnits: []WorkUnitName{
 					{RepoName: RepoName{Repo: "repo1"}, WorkUnit: "foo"},
 					{RepoName: RepoName{Repo: "repo2"}, WorkUnit: "bar"},
 				},
@@ -144,7 +144,7 @@ func TestNewSession(t *testing.T) {
 			workUnitName: "foo",
 
 			want: simplifiedState{
-				Sessions: []SessionName{
+				WorkUnits: []WorkUnitName{
 					{RepoName: RepoName{Repo: "repo"}, WorkUnit: "foo"},
 				},
 				UnqualifiedRepos: []string{"repo"},
@@ -175,7 +175,7 @@ func TestNewSession(t *testing.T) {
 			workUnitName: "bar",
 
 			want: simplifiedState{
-				Sessions: []SessionName{
+				WorkUnits: []WorkUnitName{
 					{RepoName: RepoName{Repo: "repo"}, WorkUnit: "foo"},
 					{RepoName: RepoName{Repo: "repo"}, WorkUnit: "bar"},
 				},
@@ -211,7 +211,7 @@ func TestNewSession(t *testing.T) {
 			workUnitName: "bar",
 
 			want: simplifiedState{
-				Sessions: []SessionName{
+				WorkUnits: []WorkUnitName{
 					{RepoName: RepoName{Repo: "repo1"}, WorkUnit: "foo"},
 					{RepoName: RepoName{Repo: "repo2"}, WorkUnit: "bar"},
 				},
@@ -248,7 +248,7 @@ func TestNewSession(t *testing.T) {
 			workUnitName: "foo",
 
 			want: simplifiedState{
-				Sessions: []SessionName{
+				WorkUnits: []WorkUnitName{
 					{RepoName: RepoName{Repo: "repo"}, WorkUnit: "foo"},
 				},
 				UnqualifiedRepos: []string{"repo"},
@@ -322,7 +322,7 @@ func TestRename(t *testing.T) {
 			new:     "bar",
 
 			want: simplifiedState{
-				Sessions: []SessionName{
+				WorkUnits: []WorkUnitName{
 					{RepoName: RepoName{Repo: "repo"}, WorkUnit: "bar"},
 				},
 				UnqualifiedRepos: []string{"repo"},
@@ -355,7 +355,7 @@ func TestRename(t *testing.T) {
 			new:     "baz",
 
 			want: simplifiedState{
-				Sessions: []SessionName{
+				WorkUnits: []WorkUnitName{
 					{RepoName: RepoName{Repo: "repo1"}, WorkUnit: "baz"},
 					{RepoName: RepoName{Repo: "repo2"}, WorkUnit: "bar"},
 				},
@@ -394,7 +394,7 @@ func TestRename(t *testing.T) {
 			new:     "baz",
 
 			want: simplifiedState{
-				Sessions: []SessionName{
+				WorkUnits: []WorkUnitName{
 					{RepoName: RepoName{Repo: "repo1"}, WorkUnit: "baz"},
 					{RepoName: RepoName{Repo: "repo2"}, WorkUnit: "bar"},
 				},
@@ -432,7 +432,7 @@ func TestRename(t *testing.T) {
 			new:     "foo",
 
 			want: simplifiedState{
-				Sessions: []SessionName{
+				WorkUnits: []WorkUnitName{
 					{RepoName: RepoName{Repo: "repo"}, WorkUnit: "foo"},
 				},
 				UnqualifiedRepos: []string{"repo"},
@@ -466,7 +466,7 @@ func TestRename(t *testing.T) {
 			new:     "bar",
 
 			want: simplifiedState{
-				Sessions: []SessionName{
+				WorkUnits: []WorkUnitName{
 					{RepoName: RepoName{Repo: "repo"}, WorkUnit: "foo"},
 					{RepoName: RepoName{Repo: "repo"}, WorkUnit: "bar"},
 				},
@@ -518,13 +518,13 @@ func TestRename(t *testing.T) {
 }
 
 type simplifiedState struct {
-	Sessions         []SessionName
+	WorkUnits        []WorkUnitName
 	UnqualifiedRepos []string
 	Repos            []RepoName
 }
 
 var compareSimplifiedStates = cmp.Options{
-	cmpopts.SortSlices(func(a, b SessionName) bool {
+	cmpopts.SortSlices(func(a, b WorkUnitName) bool {
 		if a.VCS != b.VCS {
 			return a.VCS < b.VCS
 		}
@@ -545,7 +545,7 @@ var compareSimplifiedStates = cmp.Options{
 func simplifyState(st *State) simplifiedState {
 	var ret simplifiedState
 	for n := range st.sessions {
-		ret.Sessions = append(ret.Sessions, n)
+		ret.WorkUnits = append(ret.WorkUnits, n)
 	}
 	for n := range st.unqualifiedRepos {
 		ret.UnqualifiedRepos = append(ret.UnqualifiedRepos, n)

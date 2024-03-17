@@ -147,7 +147,7 @@ func updateTo(workUnitName string) error {
 			slog.Warn("An error occurred with the current repository.", "error", err1)
 		}
 	}
-	slog.Info("Found repository for requested work unit.", "name", state.NewSessionName(repo, workUnitName))
+	slog.Info("Found repository for requested work unit.", "name", state.NewWorkUnitName(repo, workUnitName))
 
 	var update bool
 
