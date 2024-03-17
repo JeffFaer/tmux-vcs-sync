@@ -154,6 +154,13 @@ $ go work use . api git
 ### TODOs
 
   - Tests.
+    - tmux/state PruneSessions
+    - tmux/state MaybeFindRepository
+    - cmd new.go
+    - cmd rename.go
+    - cmd update.go no args
+    - cmd update.go with args
+    - cmd update.go completion suggestions
   - Update should accept repo-qualified work unit names.
   - tmux display-menu with better work unit ordering.
   - tmux hooks to automatically update session names when a session closes.

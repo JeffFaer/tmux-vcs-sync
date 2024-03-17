@@ -5,12 +5,12 @@ import (
 	"strings"
 )
 
-type Client struct {
-	srv *Server
+type client struct {
+	srv *server
 	TTY string
 }
 
-func (c *Client) Property(prop ClientProperty) (string, error) {
+func (c *client) Property(prop ClientProperty) (string, error) {
 	props, err := c.Properties(prop)
 	if err != nil {
 		return "", err
@@ -18,7 +18,7 @@ func (c *Client) Property(prop ClientProperty) (string, error) {
 	return props[prop], nil
 }
 
-func (c *Client) Properties(props ...ClientProperty) (map[ClientProperty]string, error) {
+func (c *client) Properties(props ...ClientProperty) (map[ClientProperty]string, error) {
 	res, err := properties(props, func(keys []string) ([]string, error) {
 		stdout, err := c.srv.command("display-message", "-t", c.TTY, "-p", "-F", strings.Join(keys, "\n")).RunStdout()
 		if err != nil {
@@ -31,9 +31,3 @@ func (c *Client) Properties(props ...ClientProperty) (map[ClientProperty]string,
 	}
 	return res, nil
 }
-
-type ClientProperty string
-
-const (
-	ClientTTY ClientProperty = "#{client_tty}"
-)

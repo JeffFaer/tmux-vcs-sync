@@ -13,16 +13,20 @@ import (
 )
 
 type State struct {
-	srv *tmux.Server
+	srv tmux.Server
 	// tmux sessions in srv with their associated repositories.
-	sessions map[SessionName]*tmux.Session
+	sessions map[SessionName]tmux.Session
 	// An index of unqualified repo names that exist in sessions.
 	unqualifiedRepos map[string]int
 	// Representative examples of each api.Repository in sessions.
 	repos map[RepoName]api.Repository
 }
 
-func New(srv *tmux.Server) (*State, error) {
+func New(srv tmux.Server) (*State, error) {
+	return newState(srv, api.Registered)
+}
+
+func newState(srv tmux.Server, vcs api.VersionControlSystems) (*State, error) {
 	sessions, err := srv.ListSessions()
 	if err != nil {
 		return nil, err
@@ -30,7 +34,7 @@ func New(srv *tmux.Server) (*State, error) {
 
 	st := &State{
 		srv:              srv,
-		sessions:         make(map[SessionName]*tmux.Session),
+		sessions:         make(map[SessionName]tmux.Session),
 		unqualifiedRepos: make(map[string]int),
 		repos:            make(map[RepoName]api.Repository),
 	}
@@ -39,7 +43,7 @@ func New(srv *tmux.Server) (*State, error) {
 	// pretty good chance for some cache hits here.
 	reposByDir := make(map[string]api.Repository)
 	for _, sesh := range sessions {
-		logger := slog.Default().With("id", sesh.ID)
+		logger := slog.Default().With("id", sesh.ID())
 		logger.Debug("Checking for repository in tmux session.")
 		props, err := sesh.Properties(tmux.SessionName, tmux.SessionPath)
 		if err != nil {
@@ -52,7 +56,7 @@ func New(srv *tmux.Server) (*State, error) {
 		repo, ok := reposByDir[path]
 		if !ok {
 			var err error
-			repo, err = api.Registered.MaybeFindRepository(path)
+			repo, err = vcs.MaybeFindRepository(path)
 			if err != nil {
 				logger.Warn("Error while checking for repository in tmux session.", "error", err)
 				continue
@@ -80,7 +84,7 @@ func (st *State) sessionNameString(n SessionName) string {
 	return n.WorkUnitString()
 }
 
-func (st *State) Sessions() map[SessionName]*tmux.Session {
+func (st *State) Sessions() map[SessionName]tmux.Session {
 	return maps.Clone(st.sessions)
 }
 
@@ -94,18 +98,18 @@ func (st *State) Repositories() []api.Repository {
 }
 
 // Session determines if a tmux session for the given work unit exists.
-func (st *State) Session(repo api.Repository, workUnitName string) *tmux.Session {
+func (st *State) Session(repo api.Repository, workUnitName string) tmux.Session {
 	n := NewSessionName(repo, workUnitName)
 	ret := st.sessions[n]
 	if ret != nil {
-		slog.Info("Found existing tmux session for work unit.", "id", ret.ID, "name", n)
+		slog.Info("Found existing tmux session for work unit.", "id", ret.ID(), "name", n)
 	}
 	return ret
 }
 
 // NewSession creates a tmux session for the given work unit.
 // Returns an error if the session already exists.
-func (st *State) NewSession(repo api.Repository, workUnitName string) (*tmux.Session, error) {
+func (st *State) NewSession(repo api.Repository, workUnitName string) (tmux.Session, error) {
 	name := NewSessionName(repo, workUnitName)
 	if _, ok := st.sessions[name]; ok {
 		return nil, fmt.Errorf("tmux session %q already exists", st.sessionNameString(name))
@@ -113,7 +117,7 @@ func (st *State) NewSession(repo api.Repository, workUnitName string) (*tmux.Ses
 
 	n := st.sessionNameString(name)
 	slog.Info("Creating tmux session.", "name", name, "session_name", n)
-	sesh, err := st.srv.NewSession(tmux.NewSessionName(n), tmux.NewSessionStartDirectory(repo.RootDir()))
+	sesh, err := st.srv.NewSession(tmux.NewSessionOptions{Name: n, StartDir: repo.RootDir()})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tmux session %q: %w", n, err)
 	}
@@ -169,8 +173,8 @@ func (st *State) PruneSessions() error {
 			validWorkUnits[NewSessionName(repo, wu)] = true
 		}
 	}
-	invalidSessions := make(map[*tmux.Session]SessionName)
-	var toRemove []*tmux.Session
+	invalidSessions := make(map[tmux.Session]SessionName)
+	var toRemove []tmux.Session
 	for n, sesh := range st.Sessions() {
 		if errRepos[n.RepoName] {
 			continue
@@ -186,8 +190,8 @@ func (st *State) PruneSessions() error {
 		// Delete the current session last so we don't terminate this command
 		// early.
 		var del bool
-		toRemove = slices.DeleteFunc(toRemove, func(other *tmux.Session) bool {
-			if curSesh.Equal(other) {
+		toRemove = slices.DeleteFunc(toRemove, func(other tmux.Session) bool {
+			if tmux.SameSession(curSesh, other) {
 				del = true
 				return true
 			}
@@ -200,7 +204,7 @@ func (st *State) PruneSessions() error {
 
 	for _, sesh := range toRemove {
 		n := invalidSessions[sesh]
-		slog.Warn("Killing session.", "session_id", sesh.ID, "name", n)
+		slog.Warn("Killing session.", "session_id", sesh.ID(), "name", n)
 		if err := sesh.Kill(); err != nil {
 			return err
 		}

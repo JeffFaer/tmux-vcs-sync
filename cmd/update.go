@@ -120,7 +120,7 @@ func update() error {
 	}
 }
 
-func updateTmux(srv *tmux.Server, st *state.State, repo api.Repository, workUnit string) error {
+func updateTmux(srv tmux.Server, st *state.State, repo api.Repository, workUnit string) error {
 	sesh := st.Session(repo, workUnit)
 	if sesh == nil {
 		var err error
@@ -129,7 +129,7 @@ func updateTmux(srv *tmux.Server, st *state.State, repo api.Repository, workUnit
 			return err
 		}
 	}
-	return srv.AttachOrSwitch(sesh.Target())
+	return srv.AttachOrSwitch(sesh)
 }
 
 func updateTo(sessionName state.SessionName) error {
@@ -167,7 +167,7 @@ func updateTo(sessionName state.SessionName) error {
 		needsSwitch = true
 	} else if cur, err := tmux.MaybeCurrentSession(); err != nil {
 		return fmt.Errorf("couldn't check tmux current state: %w", err)
-	} else if cur == nil || !cur.Equal(sesh) {
+	} else if cur == nil || !tmux.SameSession(cur, sesh) {
 		// cur == nil shouldn't be possible. We already know we're attached to tmux.
 		needsSwitch = true
 	}
