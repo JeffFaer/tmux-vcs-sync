@@ -91,6 +91,9 @@ type Client interface {
 	Property(ClientProperty) (string, error)
 	// Properties retrieves the values of all the given property keys.
 	Properties(...ClientProperty) (map[ClientProperty]string, error)
+
+	// DisplayMenu displays a menu in this client.
+	DisplayMenu([]MenuElement) error
 }
 
 type ClientProperty string
@@ -98,6 +101,21 @@ type ClientProperty string
 const (
 	ClientTTY ClientProperty = "#{client_tty}"
 )
+
+type MenuElement interface {
+	args() []string
+}
+
+// MenuEntry is an actual entry in the menu that has an executable command.
+type MenuEntry struct {
+	Name, Key, Command string
+}
+
+// MenuSpacer allows you to delineate sections within a menu.
+type MenuSpacer struct{}
+
+func (e MenuEntry) args() []string  { return []string{e.Name, e.Key, e.Command} }
+func (e MenuSpacer) args() []string { return []string{""} }
 
 type envVar struct {
 	socketPath string
