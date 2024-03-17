@@ -181,9 +181,7 @@ func (st *State) PruneSessions() error {
 			toRemove = append(toRemove, sesh)
 		}
 	}
-	if curSesh, err := tmux.MaybeCurrentSession(); err != nil {
-		slog.Warn("Could not determine current session.", "error", err)
-	} else if curSesh != nil {
+	if curSesh := tmux.MaybeCurrentSession(); curSesh != nil {
 		// Delete the current session last so we don't terminate this command
 		// early.
 		var del bool
