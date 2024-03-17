@@ -2,6 +2,9 @@ package tmux
 
 import (
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
 
 	"github.com/JeffFaer/tmux-vcs-sync/api/exec"
 )
@@ -95,3 +98,32 @@ type ClientProperty string
 const (
 	ClientTTY ClientProperty = "#{client_tty}"
 )
+
+type envVar struct {
+	socketPath string
+	pid        int
+	sessionID  string
+}
+
+func getenv() (envVar, error) {
+	env := os.Getenv("TMUX")
+	if env == "" {
+		return envVar{}, errNotTmux
+	}
+
+	sp := strings.SplitN(env, ",", 3)
+	pid, err := strconv.Atoi(sp[1])
+	if err != nil {
+		return envVar{}, fmt.Errorf("%w: %w", errNotTmux, err)
+	}
+	return envVar{sp[0], pid, fmt.Sprintf("$%s", sp[2])}, nil
+}
+
+func (env envVar) server() *server {
+	return &server{serverOptions{socketPath: env.socketPath}}
+}
+
+func (env envVar) session() *session {
+	srv := env.server()
+	return &session{srv, env.sessionID}
+}

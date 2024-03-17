@@ -20,10 +20,7 @@ type session struct {
 // CurrentSession returns a Session if this program is being executed inside
 // tmux.
 func CurrentSession() (Session, error) {
-	sesh, err := MaybeCurrentSession()
-	if err != nil {
-		return nil, err
-	}
+	sesh := MaybeCurrentSession()
 	if sesh == nil {
 		return nil, errNotTmux
 	}
@@ -31,22 +28,15 @@ func CurrentSession() (Session, error) {
 }
 
 // MaybeCurrentSession returns a Session if this program is being executed
-// inside tmux. If it's not being executed inside tmux, returns nil, nil.
-// An error may occur if we can't determine the session ID from the running
-// tmux server.
-func MaybeCurrentSession() (Session, error) {
-	srv := maybeCurrentServer()
-	if srv == nil {
-		return nil, nil
-	}
-
-	id, err := srv.command("display-message", "-p", string(SessionID)).RunStdout()
+// inside tmux. If it's not being executed inside tmux, returns nil.
+func MaybeCurrentSession() Session {
+	env, err := getenv()
 	if err != nil {
-		return nil, fmt.Errorf("could not determine session ID: %w", err)
+		return nil
 	}
-
-	slog.Info("Found current tmux session.", "server", srv, "session", id)
-	return &session{srv, id}, nil
+	sesh := env.session()
+	slog.Info("Found current tmux session.", "server", sesh.srv, "session", sesh.id)
+	return sesh
 }
 
 func (s *session) Server() Server {

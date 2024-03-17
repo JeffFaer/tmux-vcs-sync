@@ -81,9 +81,7 @@ func update() error {
 	if err != nil {
 		return fmt.Errorf("couldn't check repo's current %s: %w", repo.VCS().WorkUnitName(), err)
 	}
-	if sesh, err := tmux.MaybeCurrentSession(); err != nil {
-		return err
-	} else if sesh == nil {
+	if sesh := tmux.MaybeCurrentSession(); sesh == nil {
 		// Executed outside of tmux. Attach to the proper tmux session.
 		srv, _ := tmux.CurrentServerOrDefault()
 		state, err := state.New(srv)
@@ -168,9 +166,7 @@ func updateTo(workUnitName string) error {
 	} else if sesh := st.Session(repo, workUnitName); sesh == nil {
 		// Session doesn't exist.
 		needsSwitch = true
-	} else if cur, err := tmux.MaybeCurrentSession(); err != nil {
-		return fmt.Errorf("couldn't check tmux current state: %w", err)
-	} else if cur == nil || !tmux.SameSession(cur, sesh) {
+	} else if cur := tmux.MaybeCurrentSession(); cur == nil || !tmux.SameSession(cur, sesh) {
 		// cur == nil shouldn't be possible. We already know we're attached to tmux.
 		needsSwitch = true
 	}
