@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/JeffFaer/go-stdlib-ext/morecmp"
 	"github.com/JeffFaer/tmux-vcs-sync/api"
 	"github.com/JeffFaer/tmux-vcs-sync/tmux"
 	expmaps "golang.org/x/exp/maps"
@@ -184,17 +185,8 @@ func (st *State) PruneSessions() error {
 	if curSesh := tmux.MaybeCurrentSession(); curSesh != nil {
 		// Delete the current session last so we don't terminate this command
 		// early.
-		var del bool
-		toRemove = slices.DeleteFunc(toRemove, func(other tmux.Session) bool {
-			if tmux.SameSession(curSesh, other) {
-				del = true
-				return true
-			}
-			return false
-		})
-		if del {
-			toRemove = append(toRemove, curSesh)
-		}
+		isCurrent := func(s tmux.Session) bool { return tmux.SameSession(curSesh, s) }
+		slices.SortFunc(toRemove, morecmp.ComparingFunc(isCurrent, morecmp.FalseFirst()))
 	}
 
 	for _, sesh := range toRemove {
