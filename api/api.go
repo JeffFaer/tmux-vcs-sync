@@ -22,7 +22,8 @@ type VersionControlSystem interface {
 	Repository(dir string) (Repository, error)
 }
 
-// A Repository is a particular instance of a Version Control System over some folder hierarchy.
+// A Repository is a particular instance of a Version Control System over some
+// folder hierarchy.
 type Repository interface {
 	// VCS is a reference to the VCS that owns this repository.
 	VCS() VersionControlSystem
@@ -31,23 +32,29 @@ type Repository interface {
 	Name() string
 	// RootDir returns the root directory of the repository.
 	RootDir() string
+
 	// Current returns the name of the current work unit.
 	Current() (string, error)
-	// ListWorkUnits returns all of the work units in this repository that start
-	// with the given prefix.
-	ListWorkUnits(prefix string) ([]string, error)
-	// New creates a new work unit with the given name on top of the repository's trunk.
+	// List returns all of the work units in this repository that start with the
+	// given prefix.
+	List(prefix string) ([]string, error)
+
+	// New creates a new work unit with the given name on top of the repository's
+	// trunk.
 	// e.g. Create a new branch on main.
 	New(workUnitName string) error
-	// Commit creates a new work unit with the given name on top of the repository's current work unit.
+	// Commit creates a new work unit with the given name on top of the repository's
+	// current work unit.
 	// e.g. Create a new branch based on the current branch.
 	// n.b. Commit is the same as New if the current branch is main.
 	Commit(workUnitName string) error
-	// Rename changes the current work unit's name to the given name.
+	// Rename the current work unit's name to the given name.
 	Rename(workUnitName string) error
-	// Exists determines whether a work unit with the given name exists in this repository.
+	// Exists determines whether a work unit with the given name exists in this
+	// repository.
 	Exists(workUnitName string) (bool, error)
-	// Update affects the state of this repository so that the given work unit is "active".
+	// Update the state of this repository so that the given work unit is
+	// "active".
 	// e.g. Check out the named branch.
 	Update(workUnitName string) error
 }

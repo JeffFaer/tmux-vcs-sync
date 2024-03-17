@@ -163,7 +163,7 @@ func (st *State) PruneSessions() error {
 	validWorkUnits := make(map[WorkUnitName]bool)
 	errRepos := make(map[RepoName]bool)
 	for _, repo := range st.Repositories() {
-		wus, err := repo.ListWorkUnits("")
+		wus, err := repo.List("")
 		if err != nil {
 			n := NewRepoName(repo)
 			errRepos[n] = true
