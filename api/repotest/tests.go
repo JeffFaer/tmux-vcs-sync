@@ -246,7 +246,7 @@ func RepoTests(t *testing.T, repoCtor func(string) (api.Repository, error), opts
 			wantErr: true,
 		},
 		{
-			name: "ListWorkUnits",
+			name: "List",
 
 			test: func(repo api.Repository) error {
 				workUnitNames := append([]string{
@@ -276,15 +276,15 @@ func RepoTests(t *testing.T, repoCtor func(string) (api.Repository, error), opts
 				}, opts.ExtraListWorkUnitPrefixes...)
 				var errs []error
 				for _, tc := range tcs {
-					got, err := repo.ListWorkUnits(tc.Prefix)
+					got, err := repo.List(tc.Prefix)
 					if err != nil {
-						errs = append(errs, fmt.Errorf("repo.ListWorkUnits(%q) = _, %v", tc.Prefix, err))
+						errs = append(errs, fmt.Errorf("repo.List(%q) = _, %v", tc.Prefix, err))
 						continue
 					}
 					slices.Sort(got)
 					slices.Sort(tc.Want)
 					if diff := cmp.Diff(tc.Want, got); diff != "" {
-						errs = append(errs, fmt.Errorf("repo.ListWorkUnits(%q) diff (-want +got)\n%s", tc.Prefix, diff))
+						errs = append(errs, fmt.Errorf("repo.List(%q) diff (-want +got)\n%s", tc.Prefix, diff))
 						continue
 					}
 				}

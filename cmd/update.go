@@ -64,7 +64,7 @@ func suggestWorkUnitNames(toComplete string) []string {
 
 	var suggestions []string
 	for name, repo := range repos {
-		wus, err := repo.ListWorkUnits(toComplete)
+		wus, err := repo.List(toComplete)
 		if err != nil {
 			slog.Warn("Could not list work units.", "repo", name, "error", err)
 		}

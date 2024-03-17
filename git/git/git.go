@@ -139,7 +139,7 @@ func (repo *gitRepo) Current() (string, error) {
 	return cur, nil
 }
 
-func (repo *gitRepo) ListWorkUnits(prefix string) ([]string, error) {
+func (repo *gitRepo) List(prefix string) ([]string, error) {
 	args := []string{"branch", "--format=%(refname:short)", "--list"}
 	if prefix != "" {
 		args = append(args, prefix+"*")

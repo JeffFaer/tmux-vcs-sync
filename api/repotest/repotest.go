@@ -58,7 +58,7 @@ func (repo *fakeRepo) Current() (string, error) {
 	return repo.cur, nil
 }
 
-func (repo *fakeRepo) ListWorkUnits(prefix string) ([]string, error) {
+func (repo *fakeRepo) List(prefix string) ([]string, error) {
 	var ret []string
 	for n := range repo.workUnits {
 		if strings.HasPrefix(n, prefix) {
