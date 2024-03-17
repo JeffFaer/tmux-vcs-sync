@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/JeffFaer/go-stdlib-ext/morecmp"
 	"github.com/JeffFaer/tmux-vcs-sync/api"
 	"github.com/JeffFaer/tmux-vcs-sync/api/repotest"
 	"github.com/JeffFaer/tmux-vcs-sync/tmux"
@@ -523,23 +524,15 @@ type simplifiedState struct {
 	Repos            []RepoName
 }
 
+var repoCmp = morecmp.Comparing(func(n RepoName) string { return n.VCS }).
+	AndThen(morecmp.Comparing(func(n RepoName) string { return n.Repo }))
+
 var compareSimplifiedStates = cmp.Options{
-	cmpopts.SortSlices(func(a, b WorkUnitName) bool {
-		if a.VCS != b.VCS {
-			return a.VCS < b.VCS
-		}
-		if a.Repo != b.Repo {
-			return a.Repo < b.Repo
-		}
-		return a.WorkUnit < b.WorkUnit
-	}),
+	cmpopts.SortSlices(morecmp.ComparingFunc(func(n WorkUnitName) RepoName { return n.RepoName }, repoCmp).
+		AndThen(morecmp.Comparing(func(n WorkUnitName) string { return n.WorkUnit })).
+		LessFunc()),
 	cmpopts.SortSlices(stdcmp.Less[string]),
-	cmpopts.SortSlices(func(a, b RepoName) bool {
-		if a.VCS != b.VCS {
-			return a.VCS < b.VCS
-		}
-		return a.Repo < b.Repo
-	}),
+	cmpopts.SortSlices(repoCmp.LessFunc()),
 }
 
 func simplifyState(st *State) simplifiedState {
@@ -568,9 +561,7 @@ type simplifiedSessionState struct {
 
 var compareSimplifiedTmuxState = cmp.Options{
 	cmpopts.IgnoreFields(simplifiedSessionState{}, "ID"),
-	cmpopts.SortSlices(func(a, b simplifiedSessionState) bool {
-		return a.ID < b.ID
-	}),
+	cmpopts.SortSlices(morecmp.Comparing(func(s simplifiedSessionState) string { return s.ID }).LessFunc()),
 }
 
 func simplifyTmuxState(srv tmux.Server) simplifiedTmuxState {
