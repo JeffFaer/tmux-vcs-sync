@@ -1,5 +1,5 @@
-github.com/JeffFaer/go-stdlib-ext v0.1.1 h1:M8JFdsiV9Uyi8CFSTZr/TCAoE8bdVYuDlGvudxVkgHw=
-github.com/JeffFaer/go-stdlib-ext v0.1.1/go.mod h1:+ipHu7aPnk5LuKfU1dda8+eIEfXNF2m7bC4porFJKXs=
+github.com/JeffFaer/go-stdlib-ext v0.2.0 h1:jUNUFurbzFdh1XtENCrb+QIaHeWUe8YneHvUs81hW5M=
+github.com/JeffFaer/go-stdlib-ext v0.2.0/go.mod h1:+ipHu7aPnk5LuKfU1dda8+eIEfXNF2m7bC4porFJKXs=
 github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240314045224-4f466c92bafd h1:WJgnYObOv3BnL+AV+mUCIzGthpypB5xb3bHAvJxvbCs=
 github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240314045224-4f466c92bafd/go.mod h1:3hqch0mjY8h884063yZLPulFxvxbsoB9Pir02j3ubt4=
 github.com/adrg/xdg v0.4.0 h1:RzRqFcjH4nE5C6oTAxhBtoE2IRyjBSa62SCbyPidvls=
