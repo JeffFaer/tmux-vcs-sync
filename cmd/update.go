@@ -44,7 +44,7 @@ var updateCommand = &cobra.Command{
 func suggestWorkUnitNames(toComplete string) []string {
 	var repos map[state.RepoName]api.Repository
 	if srv := tmux.MaybeCurrentServer(); srv != nil {
-		st, err := state.New(srv)
+		st, err := state.New(srv, api.Registered)
 		if err != nil {
 			slog.Warn("Could not determine repositories from tmux server.", "server", srv, "error", err)
 		} else {
@@ -84,7 +84,7 @@ func update() error {
 	if sesh := tmux.MaybeCurrentSession(); sesh == nil {
 		// Executed outside of tmux. Attach to the proper tmux session.
 		srv, _ := tmux.CurrentServerOrDefault()
-		state, err := state.New(srv)
+		state, err := state.New(srv, api.Registered)
 		if err != nil {
 			return err
 		}
@@ -122,7 +122,7 @@ func updateTmux(srv tmux.Server, st *state.State, repo api.Repository, workUnit 
 
 func updateTo(workUnitName string) error {
 	srv, hasCurrentServer := tmux.CurrentServerOrDefault()
-	st, err := state.New(srv)
+	st, err := state.New(srv, api.Registered)
 	if err != nil {
 		return err
 	}

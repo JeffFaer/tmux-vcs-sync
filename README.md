@@ -98,6 +98,13 @@ This information and more can be found in the tool itself:
 $ tmux-vcs-sync help
 ```
 
+### tmux usage
+
+The tool also has the capability to help you switch between tmux sessions within
+tmux, similar to `tmux choose-tree`. This functionality is available via
+`tmux-vcs-sync display-menu`. You can set up tmux to use that on a keybind with
+something like `bind S run-shell "tmux-vcs-sync display-menu"`.
+
 ## Tips
 
 ### `tmux-vcs-sync`? That's a lot to type.
@@ -162,5 +169,4 @@ $ go work use . api git
     - cmd update.go with args
     - cmd update.go completion suggestions
   - Update should accept repo-qualified work unit names.
-  - tmux display-menu with better work unit ordering.
   - tmux hooks to automatically update session names when a session closes.

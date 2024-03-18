@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/JeffFaer/tmux-vcs-sync/api"
 	"github.com/JeffFaer/tmux-vcs-sync/tmux"
 	"github.com/JeffFaer/tmux-vcs-sync/tmux/state"
 	"github.com/spf13/cobra"
@@ -21,7 +22,7 @@ var cleanupCommand = &cobra.Command{
 
 func cleanup() error {
 	srv, _ := tmux.CurrentServerOrDefault()
-	st, err := state.New(srv)
+	st, err := state.New(srv, api.Registered)
 	if err != nil {
 		return err
 	}

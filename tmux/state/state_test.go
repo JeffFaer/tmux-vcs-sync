@@ -67,6 +67,7 @@ func TestNew(t *testing.T) {
 				},
 				UnqualifiedRepos: []string{"repo"},
 				Repos:            []RepoName{{Repo: "repo"}},
+				UnknownSessions:  []string{"bar"},
 			},
 		},
 		{
@@ -109,11 +110,11 @@ func TestNew(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			st, err := newState(tc.tmux, tc.vcs)
+			st, err := New(tc.tmux, tc.vcs)
 			if err != nil {
-				t.Errorf("newState() = _, %v", err)
+				t.Errorf("New() = _, %v", err)
 			}
-			if diff := cmp.Diff(tc.want, simplifyState(st), compareSimplifiedStates, cmpopts.IgnoreFields(RepoName{}, "VCS")); diff != "" {
+			if diff := cmp.Diff(tc.want, simplifyState(t, st), compareSimplifiedStates, cmpopts.IgnoreFields(RepoName{}, "VCS")); diff != "" {
 				t.Errorf("State diff (-want +got)\n%s", diff)
 			}
 		})
@@ -269,9 +270,9 @@ func TestNewSession(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			st, err := newState(tc.tmux, tc.vcs)
+			st, err := New(tc.tmux, tc.vcs)
 			if err != nil {
-				t.Fatalf("newState() = _, %v", err)
+				t.Fatalf("New() = _, %v", err)
 			}
 			repo, err := tc.vcs.MaybeFindRepository(tc.repoDir)
 			if err != nil {
@@ -285,7 +286,7 @@ func TestNewSession(t *testing.T) {
 				t.Errorf("NewSession(%q, %q) = %v, wantErr %t", tc.repoDir, tc.workUnitName, err, tc.wantErr)
 			}
 
-			if diff := cmp.Diff(tc.want, simplifyState(st), compareSimplifiedStates, cmpopts.IgnoreFields(RepoName{}, "VCS")); diff != "" {
+			if diff := cmp.Diff(tc.want, simplifyState(t, st), compareSimplifiedStates, cmpopts.IgnoreFields(RepoName{}, "VCS")); diff != "" {
 				t.Errorf("State diff (-want +got)\n%s", diff)
 			}
 			if diff := cmp.Diff(tc.wantTmux, simplifyTmuxState(tc.tmux), compareSimplifiedTmuxState); diff != "" {
@@ -492,9 +493,9 @@ func TestRename(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			st, err := newState(tc.tmux, tc.vcs)
+			st, err := New(tc.tmux, tc.vcs)
 			if err != nil {
-				t.Fatalf("newState() = _, %v", err)
+				t.Fatalf("New() = _, %v", err)
 			}
 			repo, err := tc.vcs.MaybeFindRepository(tc.repoDir)
 			if err != nil {
@@ -508,7 +509,7 @@ func TestRename(t *testing.T) {
 				t.Errorf("RenameSession(%q, %q, %q) = %v, wantErr = %t", tc.repoDir, tc.old, tc.new, err, tc.wantErr)
 			}
 
-			if diff := cmp.Diff(tc.want, simplifyState(st), compareSimplifiedStates, cmpopts.IgnoreFields(RepoName{}, "VCS")); diff != "" {
+			if diff := cmp.Diff(tc.want, simplifyState(t, st), compareSimplifiedStates, cmpopts.IgnoreFields(RepoName{}, "VCS")); diff != "" {
 				t.Errorf("State diff (-want +got)\n%s", diff)
 			}
 			if diff := cmp.Diff(tc.wantTmux, simplifyTmuxState(tc.tmux), compareSimplifiedTmuxState); diff != "" {
@@ -522,6 +523,7 @@ type simplifiedState struct {
 	WorkUnits        []WorkUnitName
 	UnqualifiedRepos []string
 	Repos            []RepoName
+	UnknownSessions  []string
 }
 
 var repoCmp = morecmp.Comparing(func(n RepoName) string { return n.VCS }).
@@ -535,16 +537,30 @@ var compareSimplifiedStates = cmp.Options{
 	cmpopts.SortSlices(repoCmp.LessFunc()),
 }
 
-func simplifyState(st *State) simplifiedState {
+func simplifyState(t *testing.T, st *State) simplifiedState {
+	t.Helper()
 	var ret simplifiedState
-	for n := range st.sessions {
+	for n, sesh := range st.sessionsByName {
 		ret.WorkUnits = append(ret.WorkUnits, n)
+
+		if wu, ok := st.sessionsByID[sesh.ID()]; !ok || wu.name() != n {
+			t.Errorf("sessionsByID[%q] = %q, %t, expected %q", sesh.ID(), wu.name(), ok, n)
+		}
+	}
+	for id, wu := range st.sessionsByID {
+		n := wu.name()
+		if _, ok := st.sessionsByName[n]; !ok {
+			t.Errorf("sessionsByName[%q] is missing, expected sesh %q", n, id)
+		}
 	}
 	for n := range st.unqualifiedRepos {
 		ret.UnqualifiedRepos = append(ret.UnqualifiedRepos, n)
 	}
 	for n := range st.repos {
 		ret.Repos = append(ret.Repos, n)
+	}
+	for n := range st.unknownSessions {
+		ret.UnknownSessions = append(ret.UnknownSessions, n)
 	}
 	return ret
 }
