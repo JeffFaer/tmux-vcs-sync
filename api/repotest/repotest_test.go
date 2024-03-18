@@ -11,7 +11,7 @@ import (
 func TestFakeRepo(t *testing.T) {
 	pre := "testing/"
 	vcs := NewVCS(pre)
-	newRepo := func(dir string) (api.Repository, error) {
+	newRepo := func(_ *testing.T, dir string) (api.Repository, error) {
 		if !strings.HasPrefix(dir, pre) {
 			dir = filepath.Join("testing", dir)
 		}

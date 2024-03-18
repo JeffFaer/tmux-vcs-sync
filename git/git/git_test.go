@@ -59,8 +59,8 @@ func (git testGitCmd) Command(args ...string) *exec.Command {
 }
 
 func TestRepoAPI(t *testing.T) {
-	git := newGit(t)
-	newGitRepo := func(name string) (api.Repository, error) {
+	newGitRepo := func(t *testing.T, name string) (api.Repository, error) {
+		git := newGit(t)
 		dir := t.TempDir()
 		return git.newRepo(dir, name)
 	}

@@ -1,7 +1,6 @@
 package repotest
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 	"testing"
@@ -32,278 +31,256 @@ type ListWorkUnitTestCase struct {
 	Want   []string
 }
 
-func RepoTests(t *testing.T, repoCtor func(string) (api.Repository, error), opts Options) {
-	for _, tc := range []struct {
-		name string
+type repoCtor func(*testing.T) api.Repository
 
-		test    func(api.Repository) error
-		wantErr bool
-	}{
-		{
-			name: "EmptyRepository_Current",
-
-			test: func(repo api.Repository) error {
-				cur, err := repo.Current()
-				if err != nil {
-					return fmt.Errorf("repo.Current() = _, %v", err)
-				}
-				if cur == "" {
-					return fmt.Errorf("expected empty repository to have a current work unit")
-				}
-				return checkExists(repo, cur)
-			},
-			wantErr: false,
-		},
-		{
-			name: "New",
-			test: func(repo api.Repository) error {
-				workUnit := "abcd"
-				if err := repo.New(workUnit); err != nil {
-					return fmt.Errorf("repo.New(%q) = %v", workUnit, err)
-				}
-				if err := checkExists(repo, workUnit); err != nil {
-					return err
-				}
-				if err := checkCurrent(repo, workUnit); err != nil {
-					return err
-				}
-				return nil
-			},
-			wantErr: false,
-		},
-		{
-			name: "New_DuplicateWorkUnitName",
-			test: func(repo api.Repository) error {
-				workUnit := "abcd"
-				if err := repo.New(workUnit); err != nil {
-					return fmt.Errorf("repo.New(%q) = %v", workUnit, err)
-				}
-				return repo.New(workUnit)
-			},
-			wantErr: !opts.ImplicitlyRenamesWorkUnits,
-		},
-		{
-			name: "CommitAfterNew",
-			test: func(repo api.Repository) error {
-				workUnits := []string{
-					"abcd1",
-					"abcd2",
-				}
-				if err := repo.New(workUnits[0]); err != nil {
-					return fmt.Errorf("repo.New(%q) = %v", workUnits[0], err)
-				}
-				if err := checkExists(repo, workUnits[0]); err != nil {
-					return err
-				}
-				if err := checkCurrent(repo, workUnits[0]); err != nil {
-					return err
-				}
-				if err := repo.Commit(workUnits[1]); err != nil {
-					return fmt.Errorf("repo.Commit(%q) = %v", workUnits[1], err)
-				}
-				if err := checkExists(repo, workUnits...); err != nil {
-					return err
-				}
-				if err := checkCurrent(repo, workUnits[1]); err != nil {
-					return err
-				}
-				return nil
-			},
-			wantErr: false,
-		},
-		{
-			name: "Rename",
-
-			test: func(repo api.Repository) error {
-				origName := "abcd"
-				newName := "efgh"
-				if err := repo.New(origName); err != nil {
-					return fmt.Errorf("repo.New(%q) = %v", origName, err)
-				}
-				if err := repo.Rename(newName); err != nil {
-					return fmt.Errorf("repo.Rename(%q) = %v", newName, err)
-				}
-				if err := checkNotExists(repo, origName); err != nil {
-					return err
-				}
-				if err := checkExists(repo, newName); err != nil {
-					return err
-				}
-				if err := checkCurrent(repo, newName); err != nil {
-					return err
-				}
-				return nil
-			},
-			wantErr: false,
-		},
-		{
-			name: "Rename_Noop",
-
-			test: func(repo api.Repository) error {
-				workUnitName := "abcd"
-				if err := repo.New(workUnitName); err != nil {
-					return fmt.Errorf("repo.New(%q) = %v", workUnitName, err)
-				}
-				return repo.Rename(workUnitName)
-			},
-			wantErr: !opts.NoopRenameIsOK,
-		},
-		{
-			name: "Rename_DuplicateWorkUnitName",
-
-			test: func(repo api.Repository) error {
-				workUnitNames := []string{
-					"abcd",
-					"efgh",
-				}
-				if err := repo.New(workUnitNames[0]); err != nil {
-					return fmt.Errorf("repo.New(%q) = %v", workUnitNames[0], err)
-				}
-				if err := repo.New(workUnitNames[1]); err != nil {
-					return fmt.Errorf("repo.New(%q) = %v", workUnitNames[1], err)
-				}
-				if err := checkCurrent(repo, workUnitNames[1]); err != nil {
-					return err
-				}
-				return repo.Rename(workUnitNames[0])
-			},
-			wantErr: !opts.ImplicitlyRenamesWorkUnits,
-		},
-		{
-			name: "Update",
-
-			test: func(repo api.Repository) error {
-				workUnitNames := []string{
-					"abcd",
-					"efgh",
-				}
-				if err := repo.New(workUnitNames[0]); err != nil {
-					return fmt.Errorf("repo.New(%q) = %v", workUnitNames[0], err)
-				}
-				if err := repo.New(workUnitNames[1]); err != nil {
-					return fmt.Errorf("repo.New(%q) = %v", workUnitNames[1], err)
-				}
-				if err := checkExists(repo, workUnitNames...); err != nil {
-					return err
-				}
-				if err := checkCurrent(repo, workUnitNames[1]); err != nil {
-					return err
-				}
-				if err := repo.Update(workUnitNames[0]); err != nil {
-					return fmt.Errorf("repo.Update(%q) = %v", workUnitNames[0], err)
-				}
-				if err := checkExists(repo, workUnitNames...); err != nil {
-					return err
-				}
-				if err := checkCurrent(repo, workUnitNames[0]); err != nil {
-					return err
-				}
-				return nil
-			},
-			wantErr: false,
-		},
-		{
-			name: "Update_OriginalWorkUnitName",
-
-			test: func(repo api.Repository) error {
-				cur, err := repo.Current()
-				if err != nil {
-					return fmt.Errorf("repo.Current() = _, %v", err)
-				}
-				workUnitName := "abcd"
-				if err := repo.New(workUnitName); err != nil {
-					return fmt.Errorf("repo.New(%q) = %v", workUnitName, err)
-				}
-				if err := checkExists(repo, cur, workUnitName); err != nil {
-					return err
-				}
-				if err := checkCurrent(repo, workUnitName); err != nil {
-					return err
-				}
-				if err := repo.Update(cur); err != nil {
-					return fmt.Errorf("repo.Update(%q) = %v", cur, err)
-				}
-				if err := checkExists(repo, cur, workUnitName); err != nil {
-					return err
-				}
-				if err := checkCurrent(repo, cur); err != nil {
-					return err
-				}
-				return nil
-			},
-			wantErr: false,
-		},
-		{
-			name: "Update_NonExistentWorkUnitName",
-
-			test: func(repo api.Repository) error {
-				workUnitName := "abcd"
-				if err := repo.New(workUnitName); err != nil {
-					return fmt.Errorf("repo.New(%q) = %v", workUnitName, err)
-				}
-				return repo.Update("efgh")
-			},
-			wantErr: true,
-		},
-		{
-			name: "List",
-
-			test: func(repo api.Repository) error {
-				workUnitNames := append([]string{
-					"abcd1",
-					"abcd2",
-					"efgh",
-				}, opts.ExtraListWorkUnitNames...)
-				cur, err := repo.Current()
-				if err != nil {
-					return fmt.Errorf("repo.Current() = _, %v", err)
-				}
-				for _, n := range workUnitNames {
-					if err := repo.New(n); err != nil {
-						return fmt.Errorf("repo.New(%q) = %v", n, err)
-					}
-				}
-
-				tcs := append([]ListWorkUnitTestCase{
-					{
-						Prefix: "",
-						Want:   slices.Concat(workUnitNames, []string{cur}),
-					},
-					{
-						Prefix: "abcd",
-						Want:   []string{"abcd1", "abcd2"},
-					},
-				}, opts.ExtraListWorkUnitPrefixes...)
-				var errs []error
-				for _, tc := range tcs {
-					got, err := repo.List(tc.Prefix)
-					if err != nil {
-						errs = append(errs, fmt.Errorf("repo.List(%q) = _, %v", tc.Prefix, err))
-						continue
-					}
-					slices.Sort(got)
-					slices.Sort(tc.Want)
-					if diff := cmp.Diff(tc.Want, got); diff != "" {
-						errs = append(errs, fmt.Errorf("repo.List(%q) diff (-want +got)\n%s", tc.Prefix, diff))
-						continue
-					}
-				}
-				return errors.Join(errs...)
-			},
-			wantErr: false,
-		},
+func RepoTests(t *testing.T, ctor func(*testing.T, string) (api.Repository, error), opts Options) {
+	for n, tc := range map[string]func(*testing.T, repoCtor, Options){
+		"EmptyRepository": testEmptyRepository,
+		"New":             testNew,
+		"Commit":          testCommit,
+		"Rename":          testRename,
+		"Update":          testUpdate,
+		"List":            testList,
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(n, func(t *testing.T) {
 			if opts.Parallel {
 				t.Parallel()
 			}
-			repo, err := repoCtor(tc.name)
-			if err != nil {
-				t.Fatalf("Could not create repository: %v", err)
+			ctor := func(t *testing.T) api.Repository {
+				repo, err := ctor(t, t.Name())
+				if err != nil {
+					t.Fatalf("Failed to create repository %q: %v", n, err)
+				}
+				return repo
 			}
+			tc(t, ctor, opts)
+		})
+	}
+}
 
-			if err := tc.test(repo); (err != nil) != tc.wantErr {
-				t.Errorf("got error %v; wantErr %t", err, tc.wantErr)
+func testEmptyRepository(t *testing.T, ctor repoCtor, opts Options) {
+	repo := ctor(t)
+	cur, err := repo.Current()
+	if err != nil {
+		t.Fatalf("repo.Current() = _, %v", err)
+	}
+	if cur == "" {
+		t.Fatalf("empty repository should have a current work unit (likely its trunk / default branch)")
+	}
+	if err := checkExists(repo, cur); err != nil {
+		t.Error(err)
+	}
+}
+
+func testNew(t *testing.T, ctor repoCtor, opts Options) {
+	repo := ctor(t)
+	workUnit := "abcd"
+	if err := repo.New(workUnit); err != nil {
+		t.Errorf("repo.New(%q) = %v", workUnit, err)
+	}
+	if err := checkExists(repo, workUnit); err != nil {
+		t.Error(err)
+	}
+	if err := checkCurrent(repo, workUnit); err != nil {
+		t.Error(err)
+	}
+
+	wantErr := !opts.ImplicitlyRenamesWorkUnits
+	if err := repo.New(workUnit); (err != nil) != wantErr {
+		t.Errorf("Creating duplicate work unit resulted in %v, wantErr %t", err, wantErr)
+	}
+}
+
+func testCommit(t *testing.T, ctor repoCtor, opts Options) {
+	repo := ctor(t)
+	workUnits := []string{
+		"abcd1",
+		"abcd2",
+	}
+	if err := repo.New(workUnits[0]); err != nil {
+		t.Errorf("repo.New(%q) = %v", workUnits[0], err)
+	}
+	if err := checkExists(repo, workUnits[0]); err != nil {
+		t.Error(err)
+	}
+	if err := checkCurrent(repo, workUnits[0]); err != nil {
+		t.Error(err)
+	}
+	if err := repo.Commit(workUnits[1]); err != nil {
+		t.Errorf("repo.Commit(%q) = %v", workUnits[1], err)
+	}
+	if err := checkExists(repo, workUnits...); err != nil {
+		t.Error(err)
+	}
+	if err := checkCurrent(repo, workUnits[1]); err != nil {
+		t.Error(err)
+	}
+}
+
+func testRename(t *testing.T, ctor repoCtor, opts Options) {
+	for _, tc := range []struct {
+		name string
+
+		workUnits []string
+		newName   string
+
+		wantErr bool
+	}{
+		{
+			name: "Simple",
+
+			workUnits: []string{"abcd"},
+			newName:   "efgh",
+		},
+		{
+			name: "NoOp",
+
+			workUnits: []string{"abcd"},
+			newName:   "abcd",
+
+			wantErr: !opts.NoopRenameIsOK,
+		},
+		{
+			name: "DuplicateRename",
+
+			workUnits: []string{"abcd", "efgh"},
+			newName:   "abcd",
+
+			wantErr: !opts.ImplicitlyRenamesWorkUnits,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := ctor(t)
+			for _, wu := range tc.workUnits {
+				if err := repo.New(wu); err != nil {
+					t.Errorf("repo.New(%q) = %v", wu, err)
+				}
+			}
+			if err := repo.Rename(tc.newName); (err != nil) != tc.wantErr {
+				t.Errorf("repo.Rename(%q) = %v, wantErr %t", tc.newName, err, tc.wantErr)
+			}
+			if tc.wantErr {
+				return
+			}
+			if prev := tc.workUnits[len(tc.workUnits)-1]; prev != tc.newName {
+				if err := checkNotExists(repo, tc.workUnits[len(tc.workUnits)-1]); err != nil {
+					t.Error(err)
+				}
+			}
+			if err := checkExists(repo, tc.newName); err != nil {
+				t.Error(err)
+			}
+			if err := checkCurrent(repo, tc.newName); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
+func testUpdate(t *testing.T, ctor repoCtor, opts Options) {
+	for _, tc := range []struct {
+		name string
+
+		workUnits     []string
+		update        string
+		updateToTrunk bool
+
+		wantErr bool
+	}{
+		{
+			name: "Simple",
+
+			workUnits: []string{"abcd", "efgh"},
+			update:    "abcd",
+		},
+		{
+			name: "UpdateToTrunk",
+
+			workUnits:     []string{"efgh"},
+			updateToTrunk: true,
+		},
+		{
+			name: "DoesNotExist",
+
+			workUnits: []string{"efgh"},
+			update:    "abcd",
+
+			wantErr: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := ctor(t)
+			if tc.updateToTrunk {
+				var err error
+				tc.update, err = repo.Current()
+				if err != nil {
+					t.Errorf("repo.Current() = _, %v", err)
+				}
+			}
+			for _, wu := range tc.workUnits {
+				if err := repo.New(wu); err != nil {
+					t.Errorf("repo.New(%q) = %v", wu, err)
+				}
+			}
+			if err := checkExists(repo, tc.workUnits...); err != nil {
+				t.Error(err)
+			}
+			if err := checkCurrent(repo, tc.workUnits[len(tc.workUnits)-1]); err != nil {
+				t.Error(err)
+			}
+			if err := repo.Update(tc.update); (err != nil) != tc.wantErr {
+				t.Errorf("repo.Update(%q) = %v, wantErr %t", tc.update, err, tc.wantErr)
+			}
+			if err := checkExists(repo, tc.workUnits...); err != nil {
+				t.Error(err)
+			}
+			if tc.wantErr {
+				return
+			}
+			if err := checkCurrent(repo, tc.update); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
+func testList(t *testing.T, ctor repoCtor, opts Options) {
+	repo := ctor(t)
+	workUnitNames := append([]string{
+		"abcd1",
+		"abcd2",
+		"efgh",
+	}, opts.ExtraListWorkUnitNames...)
+	cur, err := repo.Current()
+	if err != nil {
+		t.Errorf("repo.Current() = _, %v", err)
+	}
+	for _, n := range workUnitNames {
+		if err := repo.New(n); err != nil {
+			t.Errorf("repo.New(%q) = %v", n, err)
+		}
+	}
+
+	tcs := append([]ListWorkUnitTestCase{
+		{
+			Prefix: "",
+			Want:   slices.Concat(workUnitNames, []string{cur}),
+		},
+		{
+			Prefix: "abcd",
+			Want:   []string{"abcd1", "abcd2"},
+		},
+	}, opts.ExtraListWorkUnitPrefixes...)
+	for _, tc := range tcs {
+		t.Run(fmt.Sprintf("prefix=%q", tc.Prefix), func(t *testing.T) {
+			got, err := repo.List(tc.Prefix)
+			if err != nil {
+				t.Errorf("repo.List(%q) = _, %v", tc.Prefix, err)
+			}
+			slices.Sort(got)
+			slices.Sort(tc.Want)
+			if diff := cmp.Diff(tc.Want, got); diff != "" {
+				t.Errorf("repo.List(%q) diff (-want +got)\n%s", tc.Prefix, diff)
 			}
 		})
 	}
