@@ -307,22 +307,8 @@ func testSort(t *testing.T, ctor repoCtor, opts Options) {
 		"efgh":  {"efgh1"},
 		"efgh1": {"efgh2"},
 	}
-	created := map[string]bool{root: true}
-	for len(created) > 0 {
-		var n string
-		for n = range created {
-			break
-		}
-		delete(created, n)
-		for _, wu := range workUnits[n] {
-			if err := repo.Update(n); err != nil {
-				t.Errorf("repo.Update(%q) = %v", n, err)
-			}
-			if err := repo.Commit(wu); err != nil {
-				t.Errorf("repo.Commit(%q) = %v", wu, err)
-			}
-			created[wu] = true
-		}
+	if err := seedRepo(repo, workUnits); err != nil {
+		t.Error(err)
 	}
 
 	for _, tc := range []struct {
