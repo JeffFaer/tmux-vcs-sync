@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/JeffFaer/tmux-vcs-sync/api/exec"
 	"github.com/JeffFaer/tmux-vcs-sync/api/exec/exectest"
 	"github.com/JeffFaer/tmux-vcs-sync/api/repotest"
+	"github.com/google/go-cmp/cmp"
 	"github.com/kballard/go-shellquote"
 )
 
@@ -50,6 +52,7 @@ func (git testGit) newRepo(dir string, name string) (*testGitRepo, error) {
 		return nil, err
 	}
 	gitRepo := &testGitRepo{repo.(*gitRepo)}
+	gitRepo.gitRepo.git = git
 	if err := gitRepo.addEmptyCommit("Initial commit."); err != nil {
 		return nil, err
 	}
@@ -241,6 +244,31 @@ func TestCurrent(t *testing.T) {
 	}
 }
 
+func TestSort_DuplicateBranch(t *testing.T) {
+	git := newGit(t)
+	repo, err := git.newRepo(t.TempDir(), t.Name())
+	if err != nil {
+		t.Fatalf("Could not create repo: %v", err)
+	}
+	addBranch := func(name string) initStep {
+		return repoCommand{args: []string{"branch", name}}
+	}
+	commit := func(name string) initStep {
+		return apiCommand{"commit " + name, func(repo *testGitRepo) error { return repo.Commit(name) }}
+	}
+
+	initializeRepo(t, repo, []initStep{addBranch("foo"), commit("bar")})
+
+	branches := []string{"foo", defaultBranchName, "bar"}
+	got := slices.Clone(branches)
+	if err := repo.Sort(got); err != nil {
+		t.Errorf("repo.Sort(%q) = %v", branches, err)
+	}
+	if diff := cmp.Diff([]string{"main", "foo", "bar"}, got); diff != "" {
+		t.Errorf("repo.Sort(%q) diff (-want +got)\n%s", branches, diff)
+	}
+}
+
 type initStep interface {
 	Run(*testGitRepo) error
 	String() string
@@ -280,6 +308,19 @@ func (cmd newFile) Run(repo *testGitRepo) error {
 
 func (cmd newFile) String() string {
 	return fmt.Sprintf("echo %q > %q", cmd.content, cmd.path)
+}
+
+type apiCommand struct {
+	name string
+	cmd  func(*testGitRepo) error
+}
+
+func (cmd apiCommand) Run(repo *testGitRepo) error {
+	return cmd.cmd(repo)
+}
+
+func (cmd apiCommand) String() string {
+	return cmd.name
 }
 
 func initializeRepo(t *testing.T, repo *testGitRepo, init []initStep) {
