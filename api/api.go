@@ -38,6 +38,8 @@ type Repository interface {
 	// List returns all of the work units in this repository that start with the
 	// given prefix.
 	List(prefix string) ([]string, error)
+	// Sort orders the given work units topologically.
+	Sort(workUnits []string) error
 
 	// New creates a new work unit with the given name on top of the repository's
 	// trunk.

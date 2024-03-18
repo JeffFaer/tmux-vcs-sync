@@ -2,6 +2,7 @@ package repotest
 
 import (
 	"fmt"
+	"math/rand"
 	"slices"
 	"testing"
 
@@ -41,6 +42,7 @@ func RepoTests(t *testing.T, ctor func(*testing.T, string) (api.Repository, erro
 		"Rename":          testRename,
 		"Update":          testUpdate,
 		"List":            testList,
+		"Sort":            testSort,
 	} {
 		t.Run(n, func(t *testing.T) {
 			if opts.Parallel {
@@ -281,6 +283,95 @@ func testList(t *testing.T, ctor repoCtor, opts Options) {
 			slices.Sort(tc.Want)
 			if diff := cmp.Diff(tc.Want, got); diff != "" {
 				t.Errorf("repo.List(%q) diff (-want +got)\n%s", tc.Prefix, diff)
+			}
+		})
+	}
+}
+
+func testSort(t *testing.T, ctor repoCtor, opts Options) {
+	// root
+	// ├── abcd
+	// │   ├── abcd1
+	// │   └── abcd2
+	// └── efgh
+	//     └── efgh1
+	//         └── efgh2
+	repo := ctor(t)
+	root, err := repo.Current()
+	if err != nil {
+		t.Errorf("repo.Current() = _, %v", err)
+	}
+	workUnits := map[string][]string{
+		root:    {"abcd", "efgh"},
+		"abcd":  {"abcd1", "abcd2"},
+		"efgh":  {"efgh1"},
+		"efgh1": {"efgh2"},
+	}
+	created := map[string]bool{root: true}
+	for len(created) > 0 {
+		var n string
+		for n = range created {
+			break
+		}
+		delete(created, n)
+		for _, wu := range workUnits[n] {
+			if err := repo.Update(n); err != nil {
+				t.Errorf("repo.Update(%q) = %v", n, err)
+			}
+			if err := repo.Commit(wu); err != nil {
+				t.Errorf("repo.Commit(%q) = %v", wu, err)
+			}
+			created[wu] = true
+		}
+	}
+
+	for _, tc := range []struct {
+		name string
+
+		workUnits []string
+		wantErr   bool
+	}{
+		{
+			name: "LinkedList",
+
+			workUnits: []string{
+				root, "abcd", "abcd1",
+			},
+		},
+		{
+			name: "PartialLinkedList",
+
+			workUnits: []string{
+				"efgh", "efgh2",
+			},
+		},
+		{
+			name: "TopologicallyEquivalent",
+
+			workUnits: []string{"abcd1", "abcd2"},
+		},
+		{
+			name: "UnknownWorkUnit",
+
+			workUnits: []string{"wxyz"},
+			wantErr:   true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			want := slices.Clone(tc.workUnits)
+			rand.Shuffle(len(tc.workUnits), func(i, j int) {
+				tc.workUnits[i], tc.workUnits[j] = tc.workUnits[j], tc.workUnits[i]
+			})
+
+			got := slices.Clone(tc.workUnits)
+			if err := repo.Sort(got); (err != nil) != tc.wantErr {
+				t.Errorf("repo.Sort(%#v) = %v, wantErr %t", tc.workUnits, err, tc.wantErr)
+			}
+			if tc.wantErr {
+				return
+			}
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Errorf("repo.Sort(%#v) diff (-want +got)\n%s", tc.workUnits, diff)
 			}
 		})
 	}
