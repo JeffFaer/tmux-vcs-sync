@@ -3,36 +3,101 @@ package repotest
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strings"
 
 	"github.com/JeffFaer/tmux-vcs-sync/api"
 )
 
+const DefaultWorkUnitName = "root"
+
 // NewVCS creates a new, fake VersionControlSystem that requires all
 // repositories to be in the given directory.
-func NewVCS(dir string) api.VersionControlSystem {
-	return fakeVCS{dir}
+func NewVCS(dir string, repos ...RepoConfig) api.VersionControlSystem {
+	vcs := &fakeVCS{dir: dir, repos: make(map[string]*fakeRepo)}
+
+	seen := make(map[string]bool)
+	for _, cfg := range repos {
+		if seen[cfg.Name] {
+			panic(fmt.Errorf("repo %q configured multiple times", cfg.Name))
+		}
+		seen[cfg.Name] = true
+		repo, err := vcs.Repository(filepath.Join(dir, cfg.Name))
+		if err != nil {
+			panic(err)
+		}
+		if err := seedRepo(repo, cfg.WorkUnits); err != nil {
+			panic(err)
+		}
+	}
+
+	return vcs
+}
+
+type RepoConfig struct {
+	// Name is the name of the repo.
+	Name string
+	// WorkUnits is a map of work units keyed by parent work unit.
+	// You must have a DefaultWorkUnitName entry so we know where to start making
+	// work units from.
+	WorkUnits map[string][]string
+}
+
+func seedRepo(repo api.Repository, workUnits map[string][]string) error {
+	created, err := repo.List("")
+	if err != nil {
+		return fmt.Errorf("could not list already created work units: %w", err)
+	}
+
+	workUnits = maps.Clone(workUnits)
+	for len(created) > 0 {
+		n := created[len(created)-1]
+		created = created[:len(created)-1]
+
+		for _, wu := range workUnits[n] {
+			if err := repo.Update(n); err != nil {
+				return fmt.Errorf("could not update repo to parent %q: %w", n, err)
+			}
+			if err := repo.Commit(wu); err != nil {
+				return fmt.Errorf("could not commit %q: %w", wu, err)
+			}
+			created = append(created, wu)
+		}
+		delete(workUnits, n)
+	}
+
+	if len(workUnits) > 0 {
+		return fmt.Errorf("unable to create all work units: %#v", workUnits)
+	}
+	return nil
 }
 
 type fakeVCS struct {
-	dir string
+	dir   string
+	repos map[string]*fakeRepo
 }
 
-func (vcs fakeVCS) Name() string     { return fmt.Sprintf("fake(%s)", vcs.dir) }
-func (fakeVCS) WorkUnitName() string { return "work unit" }
-func (vcs fakeVCS) Repository(dir string) (api.Repository, error) {
+func (vcs *fakeVCS) Name() string     { return fmt.Sprintf("fake(%s)", vcs.dir) }
+func (*fakeVCS) WorkUnitName() string { return "work unit" }
+func (vcs *fakeVCS) Repository(dir string) (api.Repository, error) {
 	if !strings.HasPrefix(dir, vcs.dir) {
 		return nil, nil
 	}
-	return &fakeRepo{
+	if vcs.repos[dir] != nil {
+		return vcs.repos[dir], nil
+	}
+
+	repo := &fakeRepo{
 		vcs:       vcs,
 		name:      filepath.Base(dir),
 		dir:       dir,
-		cur:       "root",
-		workUnits: map[string]string{"root": ""},
-		children:  map[string]map[string]bool{"root": make(map[string]bool)},
-	}, nil
+		cur:       DefaultWorkUnitName,
+		workUnits: map[string]string{DefaultWorkUnitName: ""},
+		children:  map[string]map[string]bool{DefaultWorkUnitName: make(map[string]bool)},
+	}
+	vcs.repos[dir] = repo
+	return repo, nil
 }
 
 type fakeRepo struct {
@@ -80,7 +145,7 @@ func (repo *fakeRepo) Sort(workUnits []string) error {
 	}
 
 	var topo []string
-	s := map[string]bool{"root": true}
+	s := map[string]bool{DefaultWorkUnitName: true}
 	for len(s) > 0 {
 		var n string
 		for m := range s {
@@ -109,7 +174,7 @@ func (repo *fakeRepo) Sort(workUnits []string) error {
 }
 
 func (repo *fakeRepo) New(workUnitName string) error {
-	return repo.commit(workUnitName, "root")
+	return repo.commit(workUnitName, DefaultWorkUnitName)
 }
 
 func (repo *fakeRepo) Commit(workUnitName string) error {
