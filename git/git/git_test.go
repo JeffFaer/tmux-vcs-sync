@@ -23,6 +23,14 @@ type testGit struct {
 	git
 }
 
+type testGitRepo struct {
+	*gitRepo
+}
+
+type testGitCmd struct {
+	git exec.Commander
+}
+
 func newGit(t *testing.T) testGit {
 	t.Helper()
 	exec, err := exec.Lookup("git")
@@ -32,23 +40,41 @@ func newGit(t *testing.T) testGit {
 	return testGit{git{testGitCmd{exectest.NewTestCommander(t, exec)}}}
 }
 
-func (git testGit) newRepo(dir string, name string) (*gitRepo, error) {
+func (git testGit) newRepo(dir string, name string) (*testGitRepo, error) {
 	if err := git.Command("-C", dir, "init", name).Run(); err != nil {
 		return nil, fmt.Errorf("git init: %w", err)
 	}
 	dir = filepath.Join(dir, name)
-	if err := git.Command("-C", dir, "commit", "--allow-empty", "--message", "Initial commit.").Run(); err != nil {
-		return nil, fmt.Errorf("git initial commit: %v", err)
-	}
 	repo, err := git.Repository(dir)
 	if err != nil {
 		return nil, err
 	}
-	return repo.(*gitRepo), nil
+	gitRepo := &testGitRepo{repo.(*gitRepo)}
+	if err := gitRepo.addEmptyCommit("Initial commit."); err != nil {
+		return nil, err
+	}
+	return gitRepo, nil
 }
 
-type testGitCmd struct {
-	git exec.Commander
+func (repo *testGitRepo) New(workUnitName string) error {
+	if err := repo.gitRepo.New(workUnitName); err != nil {
+		return err
+	}
+	return repo.addEmptyCommit("Initial commit for " + workUnitName)
+}
+
+func (repo *testGitRepo) Commit(workUnitName string) error {
+	if err := repo.gitRepo.Commit(workUnitName); err != nil {
+		return err
+	}
+	return repo.addEmptyCommit("Initial commit for " + workUnitName)
+}
+
+func (repo *testGitRepo) addEmptyCommit(msg string) error {
+	if err := repo.gitRepo.Command("commit", "--allow-empty", "--message", msg).Run(); err != nil {
+		return fmt.Errorf("git empty commit %q: %s", msg, err)
+	}
+	return nil
 }
 
 func (git testGitCmd) Command(args ...string) *exec.Command {
@@ -59,8 +85,8 @@ func (git testGitCmd) Command(args ...string) *exec.Command {
 }
 
 func TestRepoAPI(t *testing.T) {
-	git := newGit(t)
-	newGitRepo := func(name string) (api.Repository, error) {
+	newGitRepo := func(t *testing.T, name string) (api.Repository, error) {
+		git := newGit(t)
 		dir := t.TempDir()
 		return git.newRepo(dir, name)
 	}
@@ -216,7 +242,7 @@ func TestCurrent(t *testing.T) {
 }
 
 type initStep interface {
-	Run(*gitRepo) error
+	Run(*testGitRepo) error
 	String() string
 }
 
@@ -225,7 +251,7 @@ type repoCommand struct {
 	errorMessage string
 }
 
-func (cmd repoCommand) Run(repo *gitRepo) error {
+func (cmd repoCommand) Run(repo *testGitRepo) error {
 	repoCmd := repo.Command(cmd.args...)
 	if cmd.errorMessage == "" {
 		return repoCmd.Run()
@@ -248,7 +274,7 @@ type newFile struct {
 	content string
 }
 
-func (cmd newFile) Run(repo *gitRepo) error {
+func (cmd newFile) Run(repo *testGitRepo) error {
 	return os.WriteFile(filepath.Join(repo.rootDir, cmd.path), []byte(cmd.content), 0600)
 }
 
@@ -256,7 +282,7 @@ func (cmd newFile) String() string {
 	return fmt.Sprintf("echo %q > %q", cmd.content, cmd.path)
 }
 
-func initializeRepo(t *testing.T, repo *gitRepo, init []initStep) {
+func initializeRepo(t *testing.T, repo *testGitRepo, init []initStep) {
 	t.Helper()
 	for i, step := range init {
 		if err := step.Run(repo); err != nil {

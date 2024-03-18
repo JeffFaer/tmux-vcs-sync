@@ -31,7 +31,7 @@ func newWorkUnit(workUnitName string, ctor workUnitCtor) error {
 		return err
 	}
 	srv, _ := tmux.CurrentServerOrDefault()
-	state, err := state.New(srv)
+	state, err := state.New(srv, api.Registered)
 	if err != nil {
 		return err
 	}

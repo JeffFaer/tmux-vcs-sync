@@ -1,7 +1,11 @@
 package git
 
 import (
+	"bufio"
+	"cmp"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -9,6 +13,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/JeffFaer/go-stdlib-ext/morecmp"
 	"github.com/JeffFaer/tmux-vcs-sync/api"
 	"github.com/JeffFaer/tmux-vcs-sync/api/exec"
 )
@@ -139,7 +144,7 @@ func (repo *gitRepo) Current() (string, error) {
 	return cur, nil
 }
 
-func (repo *gitRepo) ListWorkUnits(prefix string) ([]string, error) {
+func (repo *gitRepo) List(prefix string) ([]string, error) {
 	args := []string{"branch", "--format=%(refname:short)", "--list"}
 	if prefix != "" {
 		args = append(args, prefix+"*")
@@ -149,6 +154,85 @@ func (repo *gitRepo) ListWorkUnits(prefix string) ([]string, error) {
 		return nil, err
 	}
 	return strings.Split(stdout, "\n"), nil
+}
+
+func (repo *gitRepo) Sort(workUnits []string) error {
+	if len(workUnits) == 0 {
+		return nil
+	}
+
+	workUnitsByHash, err := repo.keyByHash(workUnits)
+	if err != nil {
+		return err
+	}
+
+	args := []string{"rev-list", "--topo-order", "--format=format:%H", "--reverse"}
+	// We're reversing the output of rev-list, which will use its command line for
+	// tie breakers. So reverse the order of our work units so that they'll be
+	// sorted correctly in the output.
+	slices.SortFunc(workUnits, morecmp.CmpFunc[string](cmp.Compare[string]).Reversed())
+	args = append(args, workUnits...)
+	cmd := repo.Command(args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("could not start topological sorting: %w", err)
+	}
+	var i int
+	r := bufio.NewReader(stdout)
+	for i < len(workUnitsByHash) {
+		hash, err := r.ReadString('\n')
+		if hash != "" {
+			hash = strings.TrimSuffix(hash, "\n")
+			if wu := workUnitsByHash[hash]; wu != "" {
+				workUnits[i] = wu
+				i++
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			err = errors.Join(fmt.Errorf("error during topological sorting: %w", err), cmd.Process.Kill())
+			return err
+		}
+	}
+	if i != len(workUnitsByHash) {
+		found := make(map[string]bool)
+		for _, wu := range workUnits[:i] {
+			found[wu] = true
+		}
+		var missing []string
+		for wu := range workUnitsByHash {
+			if !found[wu] {
+				missing = append(missing, wu)
+			}
+		}
+		return fmt.Errorf("only able to topologically sort %d of %d branches: unsortable branches: %q", i, len(workUnitsByHash), missing)
+	}
+	if err := cmd.Process.Kill(); err != nil {
+		slog.Warn("Problem killing rev-list command early.", "error", err)
+	}
+	return nil
+}
+
+func (repo *gitRepo) keyByHash(objects []string) (map[string]string, error) {
+	if len(objects) == 0 {
+		return nil, nil
+	}
+	args := []string{"rev-list", "--no-walk=unsorted"}
+	args = append(args, objects...)
+	stdout, err := repo.Command(args...).RunStdout()
+	if err != nil {
+		return nil, fmt.Errorf("could not get object hashes: %w", err)
+	}
+	ret := make(map[string]string)
+	for i, hash := range strings.Split(stdout, "\n") {
+		ret[hash] = objects[i]
+	}
+	return ret, nil
 }
 
 func (repo *gitRepo) New(workUnitName string) error {

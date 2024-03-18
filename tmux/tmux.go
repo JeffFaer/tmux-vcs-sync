@@ -2,6 +2,9 @@ package tmux
 
 import (
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
 
 	"github.com/JeffFaer/tmux-vcs-sync/api/exec"
 )
@@ -88,6 +91,9 @@ type Client interface {
 	Property(ClientProperty) (string, error)
 	// Properties retrieves the values of all the given property keys.
 	Properties(...ClientProperty) (map[ClientProperty]string, error)
+
+	// DisplayMenu displays a menu in this client.
+	DisplayMenu([]MenuElement) error
 }
 
 type ClientProperty string
@@ -95,3 +101,47 @@ type ClientProperty string
 const (
 	ClientTTY ClientProperty = "#{client_tty}"
 )
+
+type MenuElement interface {
+	args() []string
+}
+
+// MenuEntry is an actual entry in the menu that has an executable command.
+type MenuEntry struct {
+	Name, Key, Command string
+}
+
+// MenuSpacer allows you to delineate sections within a menu.
+type MenuSpacer struct{}
+
+func (e MenuEntry) args() []string  { return []string{e.Name, e.Key, e.Command} }
+func (e MenuSpacer) args() []string { return []string{""} }
+
+type envVar struct {
+	socketPath string
+	pid        int
+	sessionID  string
+}
+
+func getenv() (envVar, error) {
+	env := os.Getenv("TMUX")
+	if env == "" {
+		return envVar{}, errNotTmux
+	}
+
+	sp := strings.SplitN(env, ",", 3)
+	pid, err := strconv.Atoi(sp[1])
+	if err != nil {
+		return envVar{}, fmt.Errorf("%w: %w", errNotTmux, err)
+	}
+	return envVar{sp[0], pid, fmt.Sprintf("$%s", sp[2])}, nil
+}
+
+func (env envVar) server() *server {
+	return &server{serverOptions{socketPath: env.socketPath}}
+}
+
+func (env envVar) session() *session {
+	srv := env.server()
+	return &session{srv, env.sessionID}
+}

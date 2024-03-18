@@ -1,5 +1,7 @@
-github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240213050937-27e0ee44149e h1:62QDhCvRRyGUb8AM1jMzprNomC4RZU3cEjMvLaWzXRw=
-github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240213050937-27e0ee44149e/go.mod h1:jN9qfsBwxfLdhUbwSIFbM+izWRtPz0kbYyf3/197PH8=
+github.com/JeffFaer/go-stdlib-ext v0.1.1 h1:M8JFdsiV9Uyi8CFSTZr/TCAoE8bdVYuDlGvudxVkgHw=
+github.com/JeffFaer/go-stdlib-ext v0.1.1/go.mod h1:+ipHu7aPnk5LuKfU1dda8+eIEfXNF2m7bC4porFJKXs=
+github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240314045224-4f466c92bafd h1:WJgnYObOv3BnL+AV+mUCIzGthpypB5xb3bHAvJxvbCs=
+github.com/JeffFaer/tmux-vcs-sync/api v0.0.0-20240314045224-4f466c92bafd/go.mod h1:3hqch0mjY8h884063yZLPulFxvxbsoB9Pir02j3ubt4=
 github.com/adrg/xdg v0.4.0 h1:RzRqFcjH4nE5C6oTAxhBtoE2IRyjBSa62SCbyPidvls=
 github.com/adrg/xdg v0.4.0/go.mod h1:N6ag73EX4wyxeaoeHctc1mas01KZgsj5tYiAIwqJE/E=
 github.com/avast/retry-go/v4 v4.5.1 h1:AxIx0HGi4VZ3I02jr78j5lZ3M6x1E0Ivxa6b0pUUh7o=
@@ -33,6 +35,8 @@ github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.8.4 h1:CcVxjf3Q8PM0mHUKJCdn+eZZtm5yQwehR5yeSVQQcUk=
 github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
+golang.org/x/exp v0.0.0-20240314144324-c7f7c6466f7f h1:3CW0unweImhOzd5FmYuRsD4Y4oQFKZIjAnKbjV4WIrw=
+golang.org/x/exp v0.0.0-20240314144324-c7f7c6466f7f/go.mod h1:CxmFvTBINI24O/j8iY7H1xHzx2i4OsyguNBmN/uPtqc=
 golang.org/x/sys v0.0.0-20211025201205-69cdffdb9359 h1:2B5p2L5IfGiD7+b9BOoRMC6DgObAVZV+Fsp050NqXik=
 golang.org/x/sys v0.0.0-20211025201205-69cdffdb9359/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
