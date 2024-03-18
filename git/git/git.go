@@ -58,13 +58,8 @@ func (git git) rootDir(cwd string) (string, error) {
 	return git.Command("-C", cwd, "rev-parse", "--show-toplevel").RunStdout()
 }
 
-type commanderVCS interface {
-	exec.Commander
-	api.VersionControlSystem
-}
-
 type gitRepo struct {
-	git     commanderVCS
+	git
 	rootDir string
 
 	name string

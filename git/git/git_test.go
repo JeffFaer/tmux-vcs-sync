@@ -52,7 +52,7 @@ func (git testGit) newRepo(dir string, name string) (*testGitRepo, error) {
 		return nil, err
 	}
 	gitRepo := &testGitRepo{repo.(*gitRepo)}
-	gitRepo.gitRepo.git = git
+	gitRepo.gitRepo.git = git.git
 	if err := gitRepo.addEmptyCommit("Initial commit."); err != nil {
 		return nil, err
 	}
