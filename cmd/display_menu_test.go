@@ -54,9 +54,9 @@ func TestDisplayMenu(t *testing.T) {
 			name: "SingleRepo_TopologicallySorted",
 
 			sessions: []tmux.NewSessionOptions{
-				{Name: "z", StartDir: "testing/repo"},
 				{Name: "x", StartDir: "testing/repo"},
 				{Name: "y", StartDir: "testing/repo"},
+				{Name: "z", StartDir: "testing/repo"},
 			},
 			current: tmux.NewSessionOptions{Name: repotest.DefaultWorkUnitName, StartDir: "testing/repo"},
 			vcs: api.VersionControlSystems{
@@ -75,6 +75,27 @@ func TestDisplayMenu(t *testing.T) {
 				tmux.MenuEntry{Name: " z", Key: "1"},
 				tmux.MenuEntry{Name: " y", Key: "2"},
 				tmux.MenuEntry{Name: " x", Key: "3"},
+			},
+		},
+		{
+			name: "SingleRepo_WorkUnitDoesNotExist",
+
+			sessions: []tmux.NewSessionOptions{
+				{Name: "foo", StartDir: "testing/repo"},
+			},
+			current: tmux.NewSessionOptions{Name: "bar", StartDir: "testing/repo"},
+			vcs: api.VersionControlSystems{
+				repotest.NewVCS("testing/", repotest.RepoConfig{
+					Name: "repo",
+					WorkUnits: map[string][]string{
+						repotest.DefaultWorkUnitName: {"bar"},
+					},
+				}),
+			},
+
+			want: []tmux.MenuElement{
+				tmux.MenuEntry{Name: "*bar", Key: "q"},
+				tmux.MenuEntry{Name: "?foo", Key: "1"},
 			},
 		},
 		{
