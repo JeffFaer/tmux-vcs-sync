@@ -11,7 +11,6 @@ import (
 	"github.com/JeffFaer/tmux-vcs-sync/tmux"
 	"github.com/JeffFaer/tmux-vcs-sync/tmux/state"
 	"github.com/spf13/cobra"
-	"golang.org/x/exp/maps"
 )
 
 func init() {
@@ -66,15 +65,29 @@ func createMenu(curSesh tmux.Session, vcs api.VersionControlSystems) ([]tmux.Men
 	repoNames := moremaps.SortedKeysFunc(sessionsByRepo, repoCmp)
 
 	type session struct {
-		name string
-		id   string
+		name          string
+		id            string
+		unknownToRepo bool
 	}
 	var orderedSessions [][]session
 	repos := st.Repositories()
 	for _, n := range repoNames {
 		repo := repos[n]
 		sessions := sessionsByRepo[n]
-		workUnits := maps.Keys(sessions)
+		exists := make(map[string]bool)
+		if wus, err := repo.List(""); err != nil {
+			return nil, err
+		} else {
+			for _, wu := range wus {
+				exists[wu] = true
+			}
+		}
+		var workUnits []string
+		for wu := range sessions {
+			if exists[wu] {
+				workUnits = append(workUnits, wu)
+			}
+		}
 		if err := repo.Sort(workUnits); err != nil {
 			return nil, err
 		}
@@ -82,7 +95,14 @@ func createMenu(curSesh tmux.Session, vcs api.VersionControlSystems) ([]tmux.Men
 		for _, wu := range workUnits {
 			sesh := sessions[wu]
 			n := state.NewWorkUnitName(repo, wu)
-			group = append(group, session{st.SessionName(n), sesh.ID()})
+			group = append(group, session{name: st.SessionName(n), id: sesh.ID()})
+		}
+		for _, wu := range moremaps.SortedKeys(sessions) {
+			if !exists[wu] {
+				sesh := sessions[wu]
+				n := state.NewWorkUnitName(repo, wu)
+				group = append(group, session{name: st.SessionName(n), id: sesh.ID(), unknownToRepo: true})
+			}
 		}
 		orderedSessions = append(orderedSessions, group)
 	}
@@ -91,7 +111,7 @@ func createMenu(curSesh tmux.Session, vcs api.VersionControlSystems) ([]tmux.Men
 	if len(unknownSessions) > 0 {
 		var group []session
 		for _, n := range moremaps.SortedKeys(unknownSessions) {
-			group = append(group, session{n, unknownSessions[n].ID()})
+			group = append(group, session{name: n, id: unknownSessions[n].ID()})
 		}
 		orderedSessions = append(orderedSessions, group)
 	}
@@ -119,6 +139,8 @@ func createMenu(curSesh tmux.Session, vcs api.VersionControlSystems) ([]tmux.Men
 			if sesh.id == curSesh.ID() {
 				key = "q"
 				name = "*" + name
+			} else if sesh.unknownToRepo {
+				name = "?" + name
 			} else {
 				name = " " + name
 			}
