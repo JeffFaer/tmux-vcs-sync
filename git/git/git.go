@@ -161,12 +161,13 @@ func (repo *gitRepo) Sort(workUnits []string) error {
 		return nil
 	}
 
-	workUnitsByHash, err := repo.keyByHash(workUnits)
+	branchesByHash, err := repo.keyBranchByHash(workUnits)
 	if err != nil {
 		return err
 	}
+	slog.Debug("Found hashes for branches.", "hashes", branchesByHash)
 
-	args := []string{"rev-list", "--topo-order", "--format=format:%H", "--reverse"}
+	args := []string{"rev-list", "--topo-order", "--reverse"}
 	// We're reversing the output of rev-list, which will use its command line for
 	// tie breakers. So reverse the order of our work units so that they'll be
 	// sorted correctly in the output.
@@ -182,12 +183,12 @@ func (repo *gitRepo) Sort(workUnits []string) error {
 	}
 	var i int
 	r := bufio.NewReader(stdout)
-	for i < len(workUnitsByHash) {
+	for i < len(workUnits) {
 		hash, err := r.ReadString('\n')
 		if hash != "" {
 			hash = strings.TrimSuffix(hash, "\n")
-			if wu := workUnitsByHash[hash]; wu != "" {
-				workUnits[i] = wu
+			for _, b := range branchesByHash[hash] {
+				workUnits[i] = b
 				i++
 			}
 		}
@@ -199,38 +200,53 @@ func (repo *gitRepo) Sort(workUnits []string) error {
 			return err
 		}
 	}
-	if i != len(workUnitsByHash) {
+	if n := len(workUnits); i != n {
 		found := make(map[string]bool)
 		for _, wu := range workUnits[:i] {
 			found[wu] = true
 		}
 		var missing []string
-		for wu := range workUnitsByHash {
-			if !found[wu] {
-				missing = append(missing, wu)
+		for _, branches := range branchesByHash {
+			for _, b := range branches {
+				if !found[b] {
+					missing = append(missing, b)
+				}
 			}
 		}
-		return fmt.Errorf("only able to topologically sort %d of %d branches: unsortable branches: %q", i, len(workUnitsByHash), missing)
+		return fmt.Errorf("only able to topologically sort %d of %d branches: unsortable branches: %q", i, n, missing)
 	}
 	if err := cmd.Process.Kill(); err != nil {
 		slog.Warn("Problem killing rev-list command early.", "error", err)
 	}
+
+	// Move the default branch up top.
+	defaultBranch, err := repo.defaultBranchName()
+	if err != nil {
+		return err
+	}
+	isDefault := func(name string) bool { return name == defaultBranch }
+	slices.SortStableFunc(workUnits, morecmp.ComparingFunc(isDefault, morecmp.TrueFirst()))
+
 	return nil
 }
 
-func (repo *gitRepo) keyByHash(objects []string) (map[string]string, error) {
-	if len(objects) == 0 {
+func (repo *gitRepo) keyBranchByHash(branches []string) (map[string][]string, error) {
+	if len(branches) == 0 {
 		return nil, nil
 	}
-	args := []string{"rev-list", "--no-walk=unsorted"}
-	args = append(args, objects...)
+	args := []string{"branch", "--list", "--format=%(refname:short) %(objectname)"}
+	args = append(args, branches...)
 	stdout, err := repo.Command(args...).RunStdout()
 	if err != nil {
-		return nil, fmt.Errorf("could not get object hashes: %w", err)
+		return nil, fmt.Errorf("could not get branch hashes: %w", err)
 	}
-	ret := make(map[string]string)
-	for i, hash := range strings.Split(stdout, "\n") {
-		ret[hash] = objects[i]
+	ret := make(map[string][]string)
+	for _, line := range strings.Split(stdout, "\n") {
+		if line == "" {
+			break
+		}
+		sp := strings.Split(line, " ")
+		ret[sp[1]] = append(ret[sp[1]], sp[0])
 	}
 	return ret, nil
 }
@@ -252,6 +268,7 @@ func (repo *gitRepo) defaultBranchName() (string, error) {
 	}
 	for _, n := range slices.Compact([]string{def, "master"}) {
 		if repo.branchExists(n) {
+			slog.Debug("Found default branch name.", "name", n)
 			return n, nil
 		}
 	}
