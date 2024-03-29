@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/adrg/xdg"
+	"github.com/JeffFaer/tmux-vcs-sync/api/config"
 	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
 )
@@ -25,10 +25,11 @@ func Test() error {
 func Install() error {
 	mg.Deps(Build)
 	fmt.Println("Installing...")
-	dest, err := xdg.ConfigFile(filepath.Join("tmux-vcs-sync", "vcs", Filename))
+	dir, err := config.PluginDir()
 	if err != nil {
 		return err
 	}
+	dest := filepath.Join(dir, Filename)
 	return sh.Run("cp", Filename, dest)
 }
 
