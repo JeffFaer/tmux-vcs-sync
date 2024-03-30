@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+
 	"github.com/JeffFaer/tmux-vcs-sync/api"
 	"github.com/JeffFaer/tmux-vcs-sync/tmux"
 	"github.com/JeffFaer/tmux-vcs-sync/tmux/state"
@@ -15,16 +17,16 @@ var cleanupCommand = &cobra.Command{
 	Use:   "cleanup",
 	Short: "Delete tmux sessions which appear to be for work units that no longer exist.",
 	Args:  cobra.ExactArgs(0),
-	RunE: func(*cobra.Command, []string) error {
-		return cleanup()
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		return cleanup(cmd.Context())
 	},
 }
 
-func cleanup() error {
+func cleanup(ctx context.Context) error {
 	srv, _ := tmux.CurrentServerOrDefault()
-	st, err := state.New(srv, api.Registered)
+	st, err := state.New(ctx, srv, api.Registered())
 	if err != nil {
 		return err
 	}
-	return st.PruneSessions()
+	return st.PruneSessions(ctx)
 }

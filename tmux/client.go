@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
@@ -35,21 +36,21 @@ func MaybeCurrentClient() Client {
 	return &client{env.server(), currentClientTTY}
 }
 
-func (c *client) Property(prop ClientProperty) (string, error) {
-	props, err := c.Properties(prop)
+func (c *client) Property(ctx context.Context, prop ClientProperty) (string, error) {
+	props, err := c.Properties(ctx, prop)
 	if err != nil {
 		return "", err
 	}
 	return props[prop], nil
 }
 
-func (c *client) Properties(props ...ClientProperty) (map[ClientProperty]string, error) {
+func (c *client) Properties(ctx context.Context, props ...ClientProperty) (map[ClientProperty]string, error) {
 	res, err := properties(props, func(keys []string) ([]string, error) {
 		args := []string{"display-message", "-p", "-F", strings.Join(keys, "\n")}
 		if c.tty != currentClientTTY {
 			args = append(args, "-t", c.tty)
 		}
-		stdout, err := c.srv.command(args...).RunStdout()
+		stdout, err := c.srv.command(ctx, args...).RunStdout()
 		if err != nil {
 			return nil, err
 		}
@@ -61,7 +62,7 @@ func (c *client) Properties(props ...ClientProperty) (map[ClientProperty]string,
 	return res, nil
 }
 
-func (c *client) DisplayMenu(elems []MenuElement) error {
+func (c *client) DisplayMenu(ctx context.Context, elems []MenuElement) error {
 	args := []string{"display-menu"}
 	if c.tty != currentClientTTY {
 		args = append(args, "-c", c.tty)
@@ -69,5 +70,5 @@ func (c *client) DisplayMenu(elems []MenuElement) error {
 	for _, e := range elems {
 		args = append(args, e.args()...)
 	}
-	return c.srv.command(args...).Run()
+	return c.srv.command(ctx, args...).Run()
 }

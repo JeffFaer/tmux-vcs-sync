@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -22,12 +23,12 @@ var displayMenuCommand = &cobra.Command{
 	Hidden: true,
 	Short:  "Run tmux display-menu to switch to a new session.",
 	Args:   cobra.ExactArgs(0),
-	RunE: func(*cobra.Command, []string) error {
-		return displayMenu()
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		return displayMenu(cmd.Context())
 	},
 }
 
-func displayMenu() error {
+func displayMenu(ctx context.Context) error {
 	curSesh, err := tmux.CurrentSession()
 	if err != nil {
 		return err
@@ -38,15 +39,15 @@ func displayMenu() error {
 		return err
 	}
 
-	menu, err := createMenu(curSesh, api.Registered)
+	menu, err := createMenu(ctx, curSesh, api.Registered())
 	if err != nil {
 		return err
 	}
-	return curClient.DisplayMenu(menu)
+	return curClient.DisplayMenu(ctx, menu)
 }
 
-func createMenu(curSesh tmux.Session, vcs api.VersionControlSystems) ([]tmux.MenuElement, error) {
-	st, err := state.New(curSesh.Server(), vcs)
+func createMenu(ctx context.Context, curSesh tmux.Session, vcs api.VersionControlSystems) ([]tmux.MenuElement, error) {
+	st, err := state.New(ctx, curSesh.Server(), vcs)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +76,7 @@ func createMenu(curSesh tmux.Session, vcs api.VersionControlSystems) ([]tmux.Men
 		repo := repos[n]
 		sessions := sessionsByRepo[n]
 		exists := make(map[string]bool)
-		if wus, err := repo.List(""); err != nil {
+		if wus, err := repo.List(ctx, ""); err != nil {
 			return nil, err
 		} else {
 			for _, wu := range wus {
@@ -88,7 +89,7 @@ func createMenu(curSesh tmux.Session, vcs api.VersionControlSystems) ([]tmux.Men
 				workUnits = append(workUnits, wu)
 			}
 		}
-		if err := repo.Sort(workUnits); err != nil {
+		if err := repo.Sort(ctx, workUnits); err != nil {
 			return nil, err
 		}
 		var group []session

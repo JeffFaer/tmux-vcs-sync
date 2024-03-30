@@ -23,13 +23,15 @@ func init() {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 }
 
-var tmuxCmpOpt = cmp.Options{
-	cmp.Comparer(SameServer),
-	cmpopts.IgnoreFields(server{}, "opts"),
-	cmp.AllowUnexported(session{}, TestServer{}, TestSession{}, TestClient{}),
-	cmpopts.IgnoreFields(TestServer{}, "t"),
-	cmpopts.IgnoreFields(TestSession{}, "t"),
-	cmpopts.IgnoreFields(TestClient{}, "t"),
+func tmuxCmpOpt(ctx context.Context) cmp.Option {
+	return cmp.Options{
+		cmp.Comparer(func(a, b Server) bool { return SameServer(ctx, a, b) }),
+		cmpopts.IgnoreFields(server{}, "opts"),
+		cmp.AllowUnexported(session{}, TestServer{}, TestSession{}, TestClient{}),
+		cmpopts.IgnoreFields(TestServer{}, "t"),
+		cmpopts.IgnoreFields(TestSession{}, "t"),
+		cmpopts.IgnoreFields(TestClient{}, "t"),
+	}
 }
 
 type TestServer struct {
@@ -37,15 +39,15 @@ type TestServer struct {
 	t *testing.T
 }
 
-func NewServerForTesting(t *testing.T) TestServer {
+func NewServerForTesting(ctx context.Context, t *testing.T) TestServer {
 	n := fmt.Sprintf("%s-%s", t.Name(), randomString())
 	srv := NewServer(NamedServerSocket(n), ServerConfigFile("/dev/null"))
-	socketPath, err := srv.command("start-server", ";", "display-message", "-p", "#{socket_path}").RunStdout()
+	socketPath, err := srv.command(ctx, "start-server", ";", "display-message", "-p", "#{socket_path}").RunStdout()
 	if err != nil {
 		t.Fatalf("Could not determine tmux server socket path")
 	}
 	t.Cleanup(func() {
-		if err := srv.Kill(); err != nil {
+		if err := srv.Kill(context.Background()); err != nil {
 			t.Logf("Failed to kill tmux server %s: %v", n, err)
 		}
 		if err := os.Remove(socketPath); err != nil {
@@ -62,16 +64,16 @@ func randomString() string {
 	return base58.Encode(b)
 }
 
-func (srv TestServer) MustNewSession(opts NewSessionOptions) TestSession {
-	sesh, err := srv.NewSession(opts)
+func (srv TestServer) MustNewSession(ctx context.Context, opts NewSessionOptions) TestSession {
+	sesh, err := srv.NewSession(ctx, opts)
 	if err != nil {
 		srv.t.Fatal(err)
 	}
 	return TestSession{sesh.(*session), srv.t}
 }
 
-func (srv TestServer) MustListSessions() []TestSession {
-	sessions, err := srv.ListSessions()
+func (srv TestServer) MustListSessions(ctx context.Context) []TestSession {
+	sessions, err := srv.ListSessions(ctx)
 	if err != nil {
 		srv.t.Fatal(err)
 	}
@@ -82,24 +84,24 @@ func (srv TestServer) MustListSessions() []TestSession {
 	return res
 }
 
-func (srv TestServer) mustAttachCommand(s Session) *exec.Command {
-	cmd, err := srv.attachCommand(s)
+func (srv TestServer) mustAttachCommand(ctx context.Context, s Session) *exec.Command {
+	cmd, err := srv.attachCommand(ctx, s)
 	if err != nil {
 		srv.t.Fatal(err)
 	}
 	return cmd
 }
 
-func (srv TestServer) mustSwitchCommand(s Session) *exec.Command {
-	cmd, err := srv.switchCommand(s)
+func (srv TestServer) mustSwitchCommand(ctx context.Context, s Session) *exec.Command {
+	cmd, err := srv.switchCommand(ctx, s)
 	if err != nil {
 		srv.t.Fatal(err)
 	}
 	return cmd
 }
 
-func (srv TestServer) MustListClients() []TestClient {
-	clients, err := srv.ListClients()
+func (srv TestServer) MustListClients(ctx context.Context) []TestClient {
+	clients, err := srv.ListClients(ctx)
 	if err != nil {
 		srv.t.Fatal(err)
 	}
@@ -115,8 +117,8 @@ type TestSession struct {
 	t *testing.T
 }
 
-func (s TestSession) MustKill() {
-	if err := s.Kill(); err != nil {
+func (s TestSession) MustKill(ctx context.Context) {
+	if err := s.Kill(ctx); err != nil {
 		s.t.Fatal(err)
 	}
 }
@@ -126,8 +128,8 @@ type TestClient struct {
 	t *testing.T
 }
 
-func (c TestClient) MustProperties(props ...ClientProperty) map[ClientProperty]string {
-	res, err := c.Properties(props...)
+func (c TestClient) MustProperties(ctx context.Context, props ...ClientProperty) map[ClientProperty]string {
+	res, err := c.Properties(ctx, props...)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -168,47 +170,48 @@ func RunInTTY(t *testing.T, cmd *exec.Command) *os.File {
 }
 
 func TestServer_Sessions(t *testing.T) {
-	srv := NewServerForTesting(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	srv := NewServerForTesting(ctx, t)
 
-	sessions := srv.MustListSessions()
+	sessions := srv.MustListSessions(ctx)
 	if len(sessions) != 0 {
 		t.Errorf("New tmux server has %d sessions, expected 0", len(sessions))
 	}
 
-	a := srv.MustNewSession(NewSessionOptions{Name: "a"})
-	b := srv.MustNewSession(NewSessionOptions{Name: "b"})
-	c := srv.MustNewSession(NewSessionOptions{Name: "c"})
+	a := srv.MustNewSession(ctx, NewSessionOptions{Name: "a"})
+	b := srv.MustNewSession(ctx, NewSessionOptions{Name: "b"})
+	c := srv.MustNewSession(ctx, NewSessionOptions{Name: "c"})
 
-	sessions = srv.MustListSessions()
-	if diff := cmp.Diff([]TestSession{a, b, c}, sessions, tmuxCmpOpt); diff != "" {
+	sessions = srv.MustListSessions(ctx)
+	if diff := cmp.Diff([]TestSession{a, b, c}, sessions, tmuxCmpOpt(ctx)); diff != "" {
 		t.Errorf("srv.ListSessions() diff (-want +got)\n%s", diff)
 	}
 
-	b.MustKill()
+	b.MustKill(ctx)
 
-	sessions = srv.MustListSessions()
-	if diff := cmp.Diff([]TestSession{a, c}, sessions, tmuxCmpOpt); diff != "" {
+	sessions = srv.MustListSessions(ctx)
+	if diff := cmp.Diff([]TestSession{a, c}, sessions, tmuxCmpOpt(ctx)); diff != "" {
 		t.Errorf("srv.ListSessions() diff (-want +got)\n%s", diff)
 	}
 }
 
 func TestServer_AttachOrSwitch(t *testing.T) {
-	srv := NewServerForTesting(t)
-	a := srv.MustNewSession(NewSessionOptions{Name: "a"})
-	b := srv.MustNewSession(NewSessionOptions{Name: "b"})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	srv := NewServerForTesting(ctx, t)
+	a := srv.MustNewSession(ctx, NewSessionOptions{Name: "a"})
+	b := srv.MustNewSession(ctx, NewSessionOptions{Name: "b"})
 
-	if c := srv.MustListClients(); len(c) != 0 {
+	if c := srv.MustListClients(ctx); len(c) != 0 {
 		t.Errorf("Server already has %d clients:\n%v", len(c), c)
 	}
 
-	pty := RunInTTY(t, srv.mustAttachCommand(a))
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+	pty := RunInTTY(t, srv.mustAttachCommand(ctx, a))
 
 	var client TestClient
 	err := retry.Do(func() error {
-		clients := srv.MustListClients()
+		clients := srv.MustListClients(ctx)
 		if len(clients) != 1 {
 			return fmt.Errorf("server has %d clients", len(clients))
 		}
@@ -218,21 +221,21 @@ func TestServer_AttachOrSwitch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if id := client.MustProperties(ClientProperty(SessionID))[ClientProperty(SessionID)]; id != a.ID() {
+	if id := client.MustProperties(ctx, ClientProperty(SessionID))[ClientProperty(SessionID)]; id != a.ID() {
 		t.Errorf("Client is connected to %q, expected %q", id, a.ID())
 	}
 
-	switchCmd := srv.mustSwitchCommand(b)
+	switchCmd := srv.mustSwitchCommand(ctx, b)
 	sh := shellquote.Join(switchCmd.Args...)
 	t.Logf("Running command in tty: %s", sh)
 	fmt.Fprintln(pty, sh)
 
 	err = retry.Do(func() error {
-		clients := srv.MustListClients()
+		clients := srv.MustListClients(ctx)
 		if len(clients) != 1 {
 			return fmt.Errorf("server has %d clients", len(clients))
 		}
-		if id := clients[0].MustProperties(ClientProperty(SessionID))[ClientProperty(SessionID)]; id != b.ID() {
+		if id := clients[0].MustProperties(ctx, ClientProperty(SessionID))[ClientProperty(SessionID)]; id != b.ID() {
 			return fmt.Errorf("client is connected to %q, expected %q", id, b.ID())
 		}
 		return nil

@@ -2,8 +2,10 @@ package state
 
 import (
 	stdcmp "cmp"
+	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/JeffFaer/go-stdlib-ext/morecmp"
 	"github.com/JeffFaer/tmux-vcs-sync/api"
@@ -110,7 +112,9 @@ func TestNew(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			st, err := New(tc.tmux, tc.vcs)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			st, err := New(ctx, tc.tmux, tc.vcs)
 			if err != nil {
 				t.Errorf("New() = _, %v", err)
 			}
@@ -270,11 +274,13 @@ func TestNewSession(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			st, err := New(tc.tmux, tc.vcs)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			st, err := New(ctx, tc.tmux, tc.vcs)
 			if err != nil {
 				t.Fatalf("New() = _, %v", err)
 			}
-			repo, err := tc.vcs.MaybeFindRepository(tc.repoDir)
+			repo, err := tc.vcs.MaybeFindRepository(ctx, tc.repoDir)
 			if err != nil {
 				t.Fatalf("MaybeFindRepository(%q) = _, %v", tc.repoDir, err)
 			}
@@ -282,14 +288,14 @@ func TestNewSession(t *testing.T) {
 				t.Fatalf("tc.repoDir did not yield a repository")
 			}
 
-			if _, err := st.NewSession(repo, tc.workUnitName); (err != nil) != tc.wantErr {
+			if _, err := st.NewSession(ctx, repo, tc.workUnitName); (err != nil) != tc.wantErr {
 				t.Errorf("NewSession(%q, %q) = %v, wantErr %t", tc.repoDir, tc.workUnitName, err, tc.wantErr)
 			}
 
 			if diff := cmp.Diff(tc.want, simplifyState(t, st), compareSimplifiedStates, cmpopts.IgnoreFields(RepoName{}, "VCS")); diff != "" {
 				t.Errorf("State diff (-want +got)\n%s", diff)
 			}
-			if diff := cmp.Diff(tc.wantTmux, simplifyTmuxState(tc.tmux), compareSimplifiedTmuxState); diff != "" {
+			if diff := cmp.Diff(tc.wantTmux, simplifyTmuxState(ctx, tc.tmux), compareSimplifiedTmuxState); diff != "" {
 				t.Errorf("tmux diff (-want +got)\n%s", diff)
 			}
 		})
@@ -493,11 +499,13 @@ func TestRename(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			st, err := New(tc.tmux, tc.vcs)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			st, err := New(ctx, tc.tmux, tc.vcs)
 			if err != nil {
 				t.Fatalf("New() = _, %v", err)
 			}
-			repo, err := tc.vcs.MaybeFindRepository(tc.repoDir)
+			repo, err := tc.vcs.MaybeFindRepository(ctx, tc.repoDir)
 			if err != nil {
 				t.Fatalf("MaybeFindRepository(%q) = _, %v", tc.repoDir, err)
 			}
@@ -505,14 +513,14 @@ func TestRename(t *testing.T) {
 				t.Fatalf("tc.repoDir did not yield a repository")
 			}
 
-			if err := st.RenameSession(repo, tc.old, tc.new); (err != nil) != tc.wantErr {
+			if err := st.RenameSession(ctx, repo, tc.old, tc.new); (err != nil) != tc.wantErr {
 				t.Errorf("RenameSession(%q, %q, %q) = %v, wantErr = %t", tc.repoDir, tc.old, tc.new, err, tc.wantErr)
 			}
 
 			if diff := cmp.Diff(tc.want, simplifyState(t, st), compareSimplifiedStates, cmpopts.IgnoreFields(RepoName{}, "VCS")); diff != "" {
 				t.Errorf("State diff (-want +got)\n%s", diff)
 			}
-			if diff := cmp.Diff(tc.wantTmux, simplifyTmuxState(tc.tmux), compareSimplifiedTmuxState); diff != "" {
+			if diff := cmp.Diff(tc.wantTmux, simplifyTmuxState(ctx, tc.tmux), compareSimplifiedTmuxState); diff != "" {
 				t.Errorf("tmux diff (-want +got)\n%s", diff)
 			}
 		})
@@ -580,10 +588,10 @@ var compareSimplifiedTmuxState = cmp.Options{
 	cmpopts.SortSlices(morecmp.Comparing(func(s simplifiedSessionState) string { return s.ID }).LessFunc()),
 }
 
-func simplifyTmuxState(srv tmux.Server) simplifiedTmuxState {
+func simplifyTmuxState(ctx context.Context, srv tmux.Server) simplifiedTmuxState {
 	var ret simplifiedTmuxState
-	for _, sesh := range must(srv.ListSessions()) {
-		props := must(sesh.Properties(tmux.SessionName, tmux.SessionPath))
+	for _, sesh := range must(srv.ListSessions(ctx)) {
+		props := must(sesh.Properties(ctx, tmux.SessionName, tmux.SessionPath))
 		ret.Sessions = append(ret.Sessions, simplifiedSessionState{
 			ID:   sesh.ID(),
 			Name: props[tmux.SessionName],
@@ -606,7 +614,7 @@ func newServer(opts ...tmux.NewSessionOptions) tmux.Server {
 	srv := tmuxtest.NewServer(pid)
 	pid++
 	for _, opts := range opts {
-		_, err := srv.NewSession(opts)
+		_, err := srv.NewSession(context.Background(), opts)
 		if err != nil {
 			panic(fmt.Errorf("srv.NewSession(%#v) = %w", opts, err))
 		}

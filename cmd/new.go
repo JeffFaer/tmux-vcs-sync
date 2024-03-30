@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
@@ -18,20 +19,21 @@ var newCommand = &cobra.Command{
 	Use:   "new name",
 	Short: "Create a tmux session and work unit based on the current repository's trunk.",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(_ *cobra.Command, args []string) error {
-		return newWorkUnit(args[0], api.Repository.New)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return newWorkUnit(cmd.Context(), args[0], api.Repository.New)
 	},
 }
 
-type workUnitCtor func(api.Repository, string) error
+type workUnitCtor func(api.Repository, context.Context, string) error
 
-func newWorkUnit(workUnitName string, ctor workUnitCtor) error {
-	repo, err := api.Registered.CurrentRepository()
+func newWorkUnit(ctx context.Context, workUnitName string, ctor workUnitCtor) error {
+	vcs := api.Registered()
+	repo, err := vcs.CurrentRepository(ctx)
 	if err != nil {
 		return err
 	}
 	srv, _ := tmux.CurrentServerOrDefault()
-	state, err := state.New(srv, api.Registered)
+	state, err := state.New(ctx, srv, vcs)
 	if err != nil {
 		return err
 	}
@@ -42,16 +44,16 @@ func newWorkUnit(workUnitName string, ctor workUnitCtor) error {
 		// Otherwise, if the tmux session does exist, we know that state.NewSession
 		// will return an error.
 		// This logic is kinda ugly.
-		if err := ctor(repo, workUnitName); err != nil {
+		if err := ctor(repo, ctx, workUnitName); err != nil {
 			return fmt.Errorf("failed to create %s %q: %w", repo.VCS().WorkUnitName(), workUnitName, err)
 		}
 	}
 
-	sesh, err := state.NewSession(repo, workUnitName)
+	sesh, err := state.NewSession(ctx, repo, workUnitName)
 	if err != nil {
 		return err
 	}
-	if err := srv.AttachOrSwitch(sesh); err != nil {
+	if err := srv.AttachOrSwitch(ctx, sesh); err != nil {
 		return fmt.Errorf("failed to attach to newly created session %q: %w", sesh.ID(), err)
 	}
 	return nil

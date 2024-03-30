@@ -1,14 +1,15 @@
 package tmux
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
 )
 
 // Equal determines if two sessions are equivalent by checking they have the same ID and belong to the same Server.
-func SameSession(a, b Session) bool {
-	return a.ID() == b.ID() && SameServer(a.Server(), b.Server())
+func SameSession(ctx context.Context, a, b Session) bool {
+	return a.ID() == b.ID() && SameServer(ctx, a.Server(), b.Server())
 }
 
 // Session represents a tmux session on a particular server.
@@ -47,8 +48,8 @@ func (s *session) ID() string {
 	return s.id
 }
 
-func (s *session) Property(prop SessionProperty) (string, error) {
-	props, err := s.Properties(prop)
+func (s *session) Property(ctx context.Context, prop SessionProperty) (string, error) {
+	props, err := s.Properties(ctx, prop)
 	if err != nil {
 		return "", err
 	}
@@ -56,9 +57,9 @@ func (s *session) Property(prop SessionProperty) (string, error) {
 }
 
 // Properties fetches properties about a session.
-func (s *session) Properties(props ...SessionProperty) (map[SessionProperty]string, error) {
+func (s *session) Properties(ctx context.Context, props ...SessionProperty) (map[SessionProperty]string, error) {
 	res, err := properties(props, func(keys []string) ([]string, error) {
-		stdout, err := s.srv.command("display-message", "-t", s.id, "-p", strings.Join(keys, "\n")).RunStdout()
+		stdout, err := s.srv.command(ctx, "display-message", "-t", s.id, "-p", strings.Join(keys, "\n")).RunStdout()
 		if err != nil {
 			return nil, err
 		}
@@ -70,16 +71,16 @@ func (s *session) Properties(props ...SessionProperty) (map[SessionProperty]stri
 	return res, nil
 }
 
-func (s *session) Rename(name string) error {
-	err := s.srv.command("rename-session", "-t", s.id, name).Run()
+func (s *session) Rename(ctx context.Context, name string) error {
+	err := s.srv.command(ctx, "rename-session", "-t", s.id, name).Run()
 	if err != nil {
 		return fmt.Errorf("could not rename session %q to %q: %w", s.ID(), name, err)
 	}
 	return nil
 }
 
-func (s *session) Kill() error {
-	err := s.srv.command("kill-session", "-t", s.id).Run()
+func (s *session) Kill(ctx context.Context) error {
+	err := s.srv.command(ctx, "kill-session", "-t", s.id).Run()
 	if err != nil {
 		return fmt.Errorf("could not kill session %q: %w", s.ID(), err)
 	}

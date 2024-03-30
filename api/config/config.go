@@ -3,17 +3,26 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/adrg/xdg"
 )
 
-func PluginDir() (string, error) {
-	pluginDir, err := xdg.ConfigFile("tmux-vcs-sync/vcs")
+func mkdir(name string) (string, error) {
+	dir, err := xdg.ConfigFile(filepath.Join("tmux-vcs-sync", name))
 	if err != nil {
-		return "", fmt.Errorf("could not find any VCS: %w", err)
+		return "", fmt.Errorf("could not find configuration directory: %w", err)
 	}
-	if err := os.MkdirAll(pluginDir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return "", err
 	}
-	return pluginDir, nil
+	return dir, nil
+}
+
+func PluginDir() (string, error) {
+	return mkdir("vcs")
+}
+
+func TraceDir() (string, error) {
+	return mkdir("trace")
 }
