@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -43,7 +44,11 @@ func displayMenu(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return curClient.DisplayMenu(ctx, menu)
+	// Displaying the menu waits for user input, and might take a really long
+	// time. Cancel the trace early to prevent the flight recorder from thinking
+	// we took to long.
+	err = stopTrace()
+	return errors.Join(curClient.DisplayMenu(ctx, menu), err)
 }
 
 func createMenu(ctx context.Context, curSesh tmux.Session, vcs api.VersionControlSystems) ([]tmux.MenuElement, error) {
