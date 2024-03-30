@@ -12,12 +12,19 @@ import (
 	"runtime/trace"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/JeffFaer/tmux-vcs-sync/api/config"
+	"github.com/kballard/go-shellquote"
 	"github.com/phsym/console-slog"
 	"github.com/spf13/cobra"
+	exptrace "golang.org/x/exp/trace"
 )
+
+func Execute(ctx context.Context) error {
+	return rootCmd.ExecuteContext(ctx)
+}
 
 var (
 	verbosity int
@@ -27,9 +34,15 @@ var (
 		slog.LevelDebug,
 	}
 
+	traceTask *trace.Task
+
 	doTrace   bool
 	traceFile *os.File
-	traceTask *trace.Task
+
+	recordAfter    = 100 * time.Millisecond
+	start          time.Time
+	commandName    string
+	flightRecorder *exptrace.FlightRecorder
 )
 
 var rootCmd = &cobra.Command{
@@ -40,7 +53,7 @@ var rootCmd = &cobra.Command{
 		HiddenDefaultCmd: true,
 	},
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if par := cmd.Parent(); par != nil && par.Name() == "completion" {
+		if cobraBuiltin(cmd) {
 			return nil
 		}
 
@@ -55,7 +68,10 @@ var rootCmd = &cobra.Command{
 		}
 		return nil
 	},
-	PersistentPostRunE: func(*cobra.Command, []string) error {
+	PersistentPostRunE: func(cmd *cobra.Command, _ []string) error {
+		if cobraBuiltin(cmd) {
+			return nil
+		}
 		if err := stopTrace(); err != nil {
 			return err
 		}
@@ -71,6 +87,13 @@ func init() {
 	}
 }
 
+func cobraBuiltin(cmd *cobra.Command) bool {
+	if par := cmd.Parent(); par != nil && par.Name() == "completion" {
+		return true
+	}
+	return false
+}
+
 func configureLogging() {
 	slog.SetDefault(slog.New(console.NewHandler(os.Stderr, &console.HandlerOptions{
 		Level:      levels[min(verbosity, len(levels)-1)],
@@ -79,21 +102,25 @@ func configureLogging() {
 }
 
 func startTrace(cmd *cobra.Command, args []string) (context.Context, error) {
-	if !doTrace {
-		return cmd.Context(), nil
+	start = time.Now()
+	if doTrace {
+		var err error
+		traceFile, err = createTraceFile(fmt.Sprintf("%s_%s.out", cmd.Name(), start.Format(time.RFC3339Nano)))
+		if err != nil {
+			return nil, err
+		}
+		if err := trace.Start(traceFile); err != nil {
+			return nil, fmt.Errorf("trace.Start(): %w", err)
+		}
+		slog.Debug("Started tracing.")
+	} else {
+		commandName = cmd.Name()
+		flightRecorder = exptrace.NewFlightRecorder()
+		flightRecorder.SetPeriod(5 * time.Second)
+		if err := flightRecorder.Start(); err != nil {
+			return nil, fmt.Errorf("flightRecorder.Start(): %w", err)
+		}
 	}
-	dir, err := config.TraceDir()
-	if err != nil {
-		return nil, err
-	}
-	traceFile, err = os.OpenFile(filepath.Join(dir, fmt.Sprintf("trace_%s.out", time.Now().Format(time.RFC3339Nano))), os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0600)
-	if err != nil {
-		return nil, err
-	}
-	if err := trace.Start(traceFile); err != nil {
-		return nil, fmt.Errorf("trace.Start(): %w", err)
-	}
-	slog.Debug("Started tracing.")
 
 	ctx := cmd.Context()
 	var cmds []string
@@ -103,22 +130,50 @@ func startTrace(cmd *cobra.Command, args []string) (context.Context, error) {
 	slices.Reverse(cmds)
 	cmds = append(cmds, args...)
 
-	ctx, traceTask = trace.NewTask(ctx, strings.Join(cmds, " "))
+	ctx, traceTask = trace.NewTask(ctx, shellquote.Join(cmds...))
 	return ctx, nil
 }
 
-func stopTrace() error {
-	if !doTrace {
-		return nil
+func createTraceFile(filename string) (*os.File, error) {
+	dir, err := config.TraceDir()
+	if err != nil {
+		return nil, err
 	}
+	f, err := os.OpenFile(filepath.Join(dir, filename), os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+var stopTrace = sync.OnceValue(func() error {
 	traceTask.End()
-	trace.Stop()
-	slog.Warn("Trace recorded.", "file", traceFile.Name())
-	if err := traceFile.Close(); err != nil {
-		return err
+	if doTrace {
+		trace.Stop()
+		slog.Warn("Trace recorded.", "file", traceFile.Name())
+		if err := traceFile.Close(); err != nil {
+			return err
+		}
+	} else if dur := time.Since(start); dur > recordAfter {
+		dur = dur.Truncate(time.Millisecond)
+		f, err := createTraceFile(fmt.Sprintf("%s_%v_%s.out", commandName, dur, start.Format(time.RFC3339Nano)))
+		if err != nil {
+			return err
+		}
+		if _, err := flightRecorder.WriteTo(f); err != nil {
+			return fmt.Errorf("writing trace file: %w", err)
+		}
+		slog.Warn("Recording trace due to slow execution.", "duration", dur, "file", f.Name())
+
+		if err := flightRecorder.Stop(); err != nil {
+			return fmt.Errorf("flightRecorder.Stop(): %w", err)
+		}
+		if err := f.Close(); err != nil {
+			return fmt.Errorf("closing trace file: %w", err)
+		}
 	}
 	return nil
-}
+})
 
 func loadPlugins(ctx context.Context) error {
 	defer trace.StartRegion(ctx, "loading plugins").End()
@@ -165,8 +220,4 @@ func loadPlugin(ctx context.Context, file string) error {
 	defer trace.StartRegion(ctx, filepath.Base(file)).End()
 	_, err := plugin.Open(file)
 	return err
-}
-
-func Execute(ctx context.Context) error {
-	return rootCmd.ExecuteContext(ctx)
 }
