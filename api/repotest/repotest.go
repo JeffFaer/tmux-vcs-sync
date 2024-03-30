@@ -2,6 +2,7 @@
 package repotest
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -17,17 +18,18 @@ const DefaultWorkUnitName = "root"
 func NewVCS(dir string, repos ...RepoConfig) api.VersionControlSystem {
 	vcs := &fakeVCS{dir: dir, repos: make(map[string]*fakeRepo)}
 
+	ctx := context.Background()
 	seen := make(map[string]bool)
 	for _, cfg := range repos {
 		if seen[cfg.Name] {
 			panic(fmt.Errorf("repo %q configured multiple times", cfg.Name))
 		}
 		seen[cfg.Name] = true
-		repo, err := vcs.Repository(filepath.Join(dir, cfg.Name))
+		repo, err := vcs.Repository(ctx, filepath.Join(dir, cfg.Name))
 		if err != nil {
 			panic(err)
 		}
-		if err := seedRepo(repo, cfg.WorkUnits); err != nil {
+		if err := seedRepo(ctx, repo, cfg.WorkUnits); err != nil {
 			panic(err)
 		}
 	}
@@ -44,8 +46,8 @@ type RepoConfig struct {
 	WorkUnits map[string][]string
 }
 
-func seedRepo(repo api.Repository, workUnits map[string][]string) error {
-	created, err := repo.List("")
+func seedRepo(ctx context.Context, repo api.Repository, workUnits map[string][]string) error {
+	created, err := repo.List(ctx, "")
 	if err != nil {
 		return fmt.Errorf("could not list already created work units: %w", err)
 	}
@@ -56,10 +58,10 @@ func seedRepo(repo api.Repository, workUnits map[string][]string) error {
 		created = created[:len(created)-1]
 
 		for _, wu := range workUnits[n] {
-			if err := repo.Update(n); err != nil {
+			if err := repo.Update(ctx, n); err != nil {
 				return fmt.Errorf("could not update repo to parent %q: %w", n, err)
 			}
-			if err := repo.Commit(wu); err != nil {
+			if err := repo.Commit(ctx, wu); err != nil {
 				return fmt.Errorf("could not commit %q: %w", wu, err)
 			}
 			created = append(created, wu)
@@ -80,7 +82,7 @@ type fakeVCS struct {
 
 func (vcs *fakeVCS) Name() string     { return fmt.Sprintf("fake(%s)", vcs.dir) }
 func (*fakeVCS) WorkUnitName() string { return "work unit" }
-func (vcs *fakeVCS) Repository(dir string) (api.Repository, error) {
+func (vcs *fakeVCS) Repository(_ context.Context, dir string) (api.Repository, error) {
 	if !strings.HasPrefix(dir, vcs.dir) {
 		return nil, nil
 	}
@@ -121,11 +123,11 @@ func (repo *fakeRepo) RootDir() string {
 	return repo.dir
 }
 
-func (repo *fakeRepo) Current() (string, error) {
+func (repo *fakeRepo) Current(context.Context) (string, error) {
 	return repo.cur, nil
 }
 
-func (repo *fakeRepo) List(prefix string) ([]string, error) {
+func (repo *fakeRepo) List(_ context.Context, prefix string) ([]string, error) {
 	var ret []string
 	for n := range repo.workUnits {
 		if strings.HasPrefix(n, prefix) {
@@ -135,7 +137,7 @@ func (repo *fakeRepo) List(prefix string) ([]string, error) {
 	return ret, nil
 }
 
-func (repo *fakeRepo) Sort(workUnits []string) error {
+func (repo *fakeRepo) Sort(_ context.Context, workUnits []string) error {
 	allowed := make(map[string]bool)
 	for _, wu := range workUnits {
 		if _, ok := repo.workUnits[wu]; !ok {
@@ -173,11 +175,11 @@ func (repo *fakeRepo) Sort(workUnits []string) error {
 	return nil
 }
 
-func (repo *fakeRepo) New(workUnitName string) error {
+func (repo *fakeRepo) New(_ context.Context, workUnitName string) error {
 	return repo.commit(workUnitName, DefaultWorkUnitName)
 }
 
-func (repo *fakeRepo) Commit(workUnitName string) error {
+func (repo *fakeRepo) Commit(_ context.Context, workUnitName string) error {
 	return repo.commit(workUnitName, repo.cur)
 }
 
@@ -196,7 +198,7 @@ func (repo *fakeRepo) commit(workUnitName, parent string) error {
 	return nil
 }
 
-func (repo *fakeRepo) Rename(workUnitName string) error {
+func (repo *fakeRepo) Rename(_ context.Context, workUnitName string) error {
 	if _, ok := repo.workUnits[workUnitName]; ok {
 		return fmt.Errorf("work unit %q already exists", workUnitName)
 	}
@@ -212,12 +214,12 @@ func (repo *fakeRepo) Rename(workUnitName string) error {
 	return nil
 }
 
-func (repo *fakeRepo) Exists(workUnitName string) (bool, error) {
+func (repo *fakeRepo) Exists(_ context.Context, workUnitName string) (bool, error) {
 	_, ok := repo.workUnits[workUnitName]
 	return ok, nil
 }
 
-func (repo *fakeRepo) Update(workUnitName string) error {
+func (repo *fakeRepo) Update(_ context.Context, workUnitName string) error {
 	if _, ok := repo.workUnits[workUnitName]; !ok {
 		return fmt.Errorf("work unit %q does not exist", workUnitName)
 	}

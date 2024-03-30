@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/JeffFaer/tmux-vcs-sync/api"
@@ -17,13 +18,14 @@ var renameCommand = &cobra.Command{
 	Use:   "rename new-name",
 	Short: "Rename both the current tmux session and work unit.",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(_ *cobra.Command, args []string) error {
-		return rename(args[0])
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return rename(cmd.Context(), args[0])
 	},
 }
 
-func rename(newName string) error {
-	repo, err := api.Registered.CurrentRepository()
+func rename(ctx context.Context, newName string) error {
+	vcs := api.Registered()
+	repo, err := vcs.CurrentRepository(ctx)
 	if err != nil {
 		return err
 	}
@@ -31,11 +33,11 @@ func rename(newName string) error {
 	if err != nil {
 		return err
 	}
-	state, err := state.New(sesh.Server(), api.Registered)
+	state, err := state.New(ctx, sesh.Server(), vcs)
 	if err != nil {
 		return err
 	}
-	oldName, err := sesh.Property(tmux.SessionName)
+	oldName, err := sesh.Property(ctx, tmux.SessionName)
 	if err != nil {
 		return err
 	}
@@ -44,11 +46,11 @@ func rename(newName string) error {
 		// Otherwise, if the tmux session does exist, we know that state.RenameSession will
 		// return an error.
 		// This logic is kinda ugly.
-		if err := repo.Rename(newName); err != nil {
+		if err := repo.Rename(ctx, newName); err != nil {
 			return fmt.Errorf("could not rename %s %q to %q: %w", repo.VCS().WorkUnitName(), oldName, newName, err)
 		}
 	}
-	if err := state.RenameSession(repo, oldName, newName); err != nil {
+	if err := state.RenameSession(ctx, repo, oldName, newName); err != nil {
 		return err
 	}
 	return nil

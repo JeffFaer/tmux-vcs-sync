@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -30,28 +31,29 @@ var updateCommand = &cobra.Command{
 2. If executed outside of tmux without a work unit name, it will attach to a tmux session for the current work unit.
 3. If given a work unit name, it will attempt to find that work unit in any of the repositories currently active in tmux and update both tmux and that VCS to point at the given work unit. Note: This means that you can update to a work unit that exists in a different repository.`,
 	Args: cobra.RangeArgs(0, 1),
-	ValidArgsFunction: func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return suggestWorkUnitNames(toComplete), 0
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return suggestWorkUnitNames(cmd.Context(), toComplete), 0
 	},
-	RunE: func(_ *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
-			return update()
+			return update(cmd.Context())
 		}
-		return updateTo(args[0])
+		return updateTo(cmd.Context(), args[0])
 	},
 }
 
-func suggestWorkUnitNames(toComplete string) []string {
+func suggestWorkUnitNames(ctx context.Context, toComplete string) []string {
+	vcs := api.Registered()
 	repos := make(map[state.RepoName]api.Repository)
 	if srv := tmux.MaybeCurrentServer(); srv != nil {
-		st, err := state.New(srv, api.Registered)
+		st, err := state.New(ctx, srv, vcs)
 		if err != nil {
 			slog.Warn("Could not determine repositories from tmux server.", "server", srv, "error", err)
 		} else {
 			repos = st.Repositories()
 		}
 	}
-	if repo, err := api.Registered.MaybeCurrentRepository(); err != nil {
+	if repo, err := vcs.MaybeCurrentRepository(ctx); err != nil {
 		slog.Warn("Could not determine current repository.", "error", err)
 	} else {
 		n := state.NewRepoName(repo)
@@ -62,7 +64,7 @@ func suggestWorkUnitNames(toComplete string) []string {
 
 	var suggestions []string
 	for name, repo := range repos {
-		wus, err := repo.List(toComplete)
+		wus, err := repo.List(ctx, toComplete)
 		if err != nil {
 			slog.Warn("Could not list work units.", "repo", name, "error", err)
 		}
@@ -72,33 +74,34 @@ func suggestWorkUnitNames(toComplete string) []string {
 	return suggestions
 }
 
-func update() error {
-	repo, err := api.Registered.CurrentRepository()
+func update(ctx context.Context) error {
+	vcs := api.Registered()
+	repo, err := vcs.CurrentRepository(ctx)
 	if err != nil {
 		return err
 	}
-	cur, err := repo.Current()
+	cur, err := repo.Current(ctx)
 	if err != nil {
 		return fmt.Errorf("couldn't check repo's current %s: %w", repo.VCS().WorkUnitName(), err)
 	}
 	if sesh := tmux.MaybeCurrentSession(); sesh == nil {
 		// Executed outside of tmux. Attach to the proper tmux session.
 		srv, _ := tmux.CurrentServerOrDefault()
-		state, err := state.New(srv, api.Registered)
+		state, err := state.New(ctx, srv, vcs)
 		if err != nil {
 			return err
 		}
-		return updateTmux(srv, state, repo, cur)
+		return updateTmux(ctx, srv, state, repo, cur)
 	} else {
 		// Executed within tmux. Update the repo state.
-		name, err := sesh.Property(tmux.SessionName)
+		name, err := sesh.Property(ctx, tmux.SessionName)
 		if err != nil {
 			return err
 		}
 		parsed := state.ParseSessionName(repo, name)
 		if cur != parsed.WorkUnit {
 			slog.Info("Updating repository.", "current", cur, "want", parsed.WorkUnit)
-			return repo.Update(parsed.WorkUnit)
+			return repo.Update(ctx, parsed.WorkUnit)
 		}
 		slog.Info("No update needed.")
 		if failNoop {
@@ -108,31 +111,32 @@ func update() error {
 	}
 }
 
-func updateTmux(srv tmux.Server, st *state.State, repo api.Repository, workUnit string) error {
+func updateTmux(ctx context.Context, srv tmux.Server, st *state.State, repo api.Repository, workUnit string) error {
 	sesh := st.Session(repo, workUnit)
 	if sesh == nil {
 		var err error
-		sesh, err = st.NewSession(repo, workUnit)
+		sesh, err = st.NewSession(ctx, repo, workUnit)
 		if err != nil {
 			return err
 		}
 	}
-	return srv.AttachOrSwitch(sesh)
+	return srv.AttachOrSwitch(ctx, sesh)
 }
 
-func updateTo(workUnitName string) error {
+func updateTo(ctx context.Context, workUnitName string) error {
+	vcs := api.Registered()
 	srv, hasCurrentServer := tmux.CurrentServerOrDefault()
-	st, err := state.New(srv, api.Registered)
+	st, err := state.New(ctx, srv, vcs)
 	if err != nil {
 		return err
 	}
 
 	var repo api.Repository
-	if cur, err1 := existsInCurrentRepo(workUnitName); err1 == nil && cur != nil {
+	if cur, err1 := existsInCurrentRepo(ctx, vcs, workUnitName); err1 == nil && cur != nil {
 		repo = cur
 	} else {
 		var err2 error
-		repo, err2 = st.MaybeFindRepository(workUnitName)
+		repo, err2 = st.MaybeFindRepository(ctx, workUnitName)
 		if err2 != nil {
 			return errors.Join(err1, err2)
 		}
@@ -148,11 +152,11 @@ func updateTo(workUnitName string) error {
 	var update bool
 
 	// Update to the work unit.
-	if cur, err := repo.Current(); err != nil {
+	if cur, err := repo.Current(ctx); err != nil {
 		return fmt.Errorf("couldn't check repo's current %s: %w", repo.VCS().WorkUnitName(), err)
 	} else if cur != workUnitName {
 		slog.Info("Updating repository.", "current", cur, "want", workUnitName)
-		if err := repo.Update(workUnitName); err != nil {
+		if err := repo.Update(ctx, workUnitName); err != nil {
 			return err
 		}
 		update = true
@@ -166,12 +170,12 @@ func updateTo(workUnitName string) error {
 	} else if sesh := st.Session(repo, workUnitName); sesh == nil {
 		// Session doesn't exist.
 		needsSwitch = true
-	} else if cur := tmux.MaybeCurrentSession(); cur == nil || !tmux.SameSession(cur, sesh) {
+	} else if cur := tmux.MaybeCurrentSession(); cur == nil || !tmux.SameSession(ctx, cur, sesh) {
 		// cur == nil shouldn't be possible. We already know we're attached to tmux.
 		needsSwitch = true
 	}
 	if needsSwitch {
-		if err := updateTmux(srv, st, repo, workUnitName); err != nil {
+		if err := updateTmux(ctx, srv, st, repo, workUnitName); err != nil {
 			return err
 		}
 		update = true
@@ -187,15 +191,15 @@ func updateTo(workUnitName string) error {
 	return nil
 }
 
-func existsInCurrentRepo(workUnitName string) (api.Repository, error) {
-	repo, err := api.Registered.MaybeCurrentRepository()
+func existsInCurrentRepo(ctx context.Context, vcs api.VersionControlSystems, workUnitName string) (api.Repository, error) {
+	repo, err := vcs.MaybeCurrentRepository(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if repo == nil {
 		return nil, nil
 	}
-	ok, err := repo.Exists(workUnitName)
+	ok, err := repo.Exists(ctx, workUnitName)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,7 @@
 package tmuxtest
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -32,9 +33,9 @@ func NewServer(pid int) *Server {
 	return servers[pid]
 }
 
-func (srv *Server) PID() (int, error) { return srv.pid, nil }
+func (srv *Server) PID(context.Context) (int, error) { return srv.pid, nil }
 
-func (srv *Server) ListSessions() ([]tmux.Session, error) {
+func (srv *Server) ListSessions(context.Context) ([]tmux.Session, error) {
 	var ret []tmux.Session
 	for _, sesh := range srv.sessions {
 		if sesh.dead {
@@ -45,11 +46,11 @@ func (srv *Server) ListSessions() ([]tmux.Session, error) {
 	return ret, nil
 }
 
-func (srv *Server) ListClients() ([]tmux.Client, error) {
+func (srv *Server) ListClients(context.Context) ([]tmux.Client, error) {
 	return nil, nil
 }
 
-func (srv *Server) NewSession(opts tmux.NewSessionOptions) (tmux.Session, error) {
+func (srv *Server) NewSession(_ context.Context, opts tmux.NewSessionOptions) (tmux.Session, error) {
 	idNum := srv.nextSessionID
 	id := fmt.Sprintf("%d#%d", srv.pid, idNum)
 	srv.nextSessionID++
@@ -82,8 +83,8 @@ func (srv *Server) NewSession(opts tmux.NewSessionOptions) (tmux.Session, error)
 	return srv.sessions[id], nil
 }
 
-func (srv *Server) AttachOrSwitch(sesh tmux.Session) error {
-	if !tmux.SameServer(srv, sesh.Server()) {
+func (srv *Server) AttachOrSwitch(ctx context.Context, sesh tmux.Session) error {
+	if !tmux.SameServer(ctx, srv, sesh.Server()) {
 		return fmt.Errorf("session %q does not belong to this server", sesh.ID())
 	}
 	if srv.sessions[sesh.ID()].dead {
@@ -93,7 +94,7 @@ func (srv *Server) AttachOrSwitch(sesh tmux.Session) error {
 	return nil
 }
 
-func (srv *Server) Kill() error {
+func (srv *Server) Kill(context.Context) error {
 	srv.sessions = nil
 	srv.CurrentSession = nil
 	return nil
@@ -112,15 +113,15 @@ var _ tmux.Session = (*Session)(nil)
 func (s *Session) Server() tmux.Server { return s.srv }
 func (s *Session) ID() string          { return s.id }
 
-func (s *Session) Property(prop tmux.SessionProperty) (string, error) {
-	vals, err := s.Properties(prop)
+func (s *Session) Property(ctx context.Context, prop tmux.SessionProperty) (string, error) {
+	vals, err := s.Properties(ctx, prop)
 	if err != nil {
 		return "", err
 	}
 	return vals[prop], nil
 }
 
-func (s *Session) Properties(props ...tmux.SessionProperty) (map[tmux.SessionProperty]string, error) {
+func (s *Session) Properties(_ context.Context, props ...tmux.SessionProperty) (map[tmux.SessionProperty]string, error) {
 	if s.dead {
 		return nil, fmt.Errorf("session %q was killed", s.id)
 	}
@@ -139,7 +140,7 @@ func (s *Session) setProperty(k tmux.SessionProperty, v string) {
 	s.props[k] = v
 }
 
-func (s *Session) Rename(n string) error {
+func (s *Session) Rename(_ context.Context, n string) error {
 	if s.dead {
 		return fmt.Errorf("session %q was killed", s.id)
 	}
@@ -147,7 +148,7 @@ func (s *Session) Rename(n string) error {
 	return nil
 }
 
-func (s *Session) Kill() error {
+func (s *Session) Kill(context.Context) error {
 	if s.dead {
 		return fmt.Errorf("session %q was already killed", s.id)
 	}

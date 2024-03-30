@@ -2,15 +2,16 @@ package exec
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"os/exec"
+	"runtime/trace"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/kballard/go-shellquote"
 )
@@ -24,16 +25,18 @@ func Lookup(name string) (Executable, error) {
 }
 
 type Commander interface {
-	Command(args ...string) *Command
+	Command(ctx context.Context, args ...string) *Command
 }
 
 type Executable string
 
-func (exe Executable) Command(args ...string) *Command {
-	cmd := exec.Command(string(exe), args...)
+var _ Commander = Executable("")
+
+func (exe Executable) Command(ctx context.Context, args ...string) *Command {
+	cmd := exec.CommandContext(ctx, string(exe), args...)
 	cmd.Stdout = defaultStdout
 	cmd.Stderr = defaultStderr
-	return &Command{cmd}
+	return &Command{ctx, cmd}
 }
 
 var (
@@ -54,6 +57,7 @@ type OverrideableWriter interface {
 type cmd = exec.Cmd
 
 type Command struct {
+	ctx context.Context
 	*cmd
 }
 
@@ -107,23 +111,24 @@ func (cmd *Command) StderrPipe() (io.ReadCloser, error) {
 }
 
 func (cmd *Command) Start() error {
-	start := time.Now()
-	logger := slog.Default().With("command", cmd)
-	logger.Debug("Executing external process. (1/2)")
+	slog.Debug("Executing external process.", "command", cmd)
+	ctx, task := trace.NewTask(cmd.ctx, cmd.Args[0])
+	trace.Logf(ctx, "command", "%v", cmd)
 	err := cmd.cmd.Start()
 	go func() {
 		cmd.Wait()
-		logger.Debug("Executing external process. (2/2)", "elapsed", time.Since(start).Truncate(time.Millisecond), "exit_code", cmd.ProcessState.ExitCode())
+		trace.Logf(ctx, "exit code", "%d", cmd.ProcessState.ExitCode())
+		task.End()
 	}()
 	return err
 }
 
 func (cmd *Command) Run() error {
-	start := time.Now()
-	logger := slog.Default().With("command", cmd)
-	logger.Debug("Executing external process. (1/2)")
+	defer trace.StartRegion(cmd.ctx, cmd.Args[0]).End()
+	trace.Logf(cmd.ctx, "command", "%v", cmd)
+	slog.Debug("Executing external process.", "command", cmd)
 	err := cmd.cmd.Run()
-	logger.Debug("Executing external process. (2/2)", "elapsed", time.Since(start).Truncate(time.Millisecond), "exit_code", cmd.ProcessState.ExitCode())
+	trace.Logf(cmd.ctx, "exit code", "%d", cmd.ProcessState.ExitCode())
 	return err
 }
 

@@ -1,6 +1,7 @@
 package exectest
 
 import (
+	"context"
 	"testing"
 
 	"github.com/JeffFaer/tmux-vcs-sync/api/exec"
@@ -18,8 +19,8 @@ func NewTestCommander(t *testing.T, cmd exec.Commander) TestCommander {
 	return TestCommander{cmd, t}
 }
 
-func (c TestCommander) Command(args ...string) *exec.Command {
-	cmd := c.Commander.Command(args...)
+func (c TestCommander) Command(ctx context.Context, args ...string) *exec.Command {
+	cmd := c.Commander.Command(ctx, args...)
 	c.t.Logf("Executing command %s", shellquote.Join(cmd.Args...))
 	w := testingWriter{t: c.t}
 	cmd.Stdout = w

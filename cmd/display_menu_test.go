@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/JeffFaer/tmux-vcs-sync/api"
 	"github.com/JeffFaer/tmux-vcs-sync/api/repotest"
@@ -176,19 +178,21 @@ func TestDisplayMenu(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
 			srv := tmuxtest.NewServer(i)
 			for _, sesh := range tc.sessions {
-				if _, err := srv.NewSession(sesh); err != nil {
+				if _, err := srv.NewSession(ctx, sesh); err != nil {
 					t.Errorf("tmux.NewSession(%#v) = _, %v", sesh, err)
 				}
 			}
 
-			current, err := srv.NewSession(tc.current)
+			current, err := srv.NewSession(ctx, tc.current)
 			if err != nil {
 				t.Errorf("tmux.NewSession(%#v) = _, %v", tc.current, err)
 			}
 
-			got, err := createMenu(current, tc.vcs)
+			got, err := createMenu(ctx, current, tc.vcs)
 			if err != nil {
 				t.Errorf("createMenu() = _, %v", err)
 			}

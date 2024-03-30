@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -25,20 +26,20 @@ func init() {
 
 type Server interface {
 	// PID returns the process ID of the server, if it's currently active.
-	PID() (int, error)
+	PID(context.Context) (int, error)
 
 	// ListSessions lists the sessions that exist in this tmux server.
-	ListSessions() ([]Session, error)
+	ListSessions(context.Context) ([]Session, error)
 	// ListClients lists all clients currently attached to this tmux server.
-	ListClients() ([]Client, error)
+	ListClients(context.Context) ([]Client, error)
 
 	// NewSession creates a new session in this tmux server.
-	NewSession(NewSessionOptions) (Session, error)
+	NewSession(context.Context, NewSessionOptions) (Session, error)
 	// AttachOrSwitch either attaches the controlling terminal to the given TargetSession or switches the current tmux client to the TargetSession.
-	AttachOrSwitch(Session) error
+	AttachOrSwitch(context.Context, Session) error
 
 	// Kill this tmux server.
-	Kill() error
+	Kill(context.Context) error
 }
 
 // NewSessionOptions affects how NewSession creates sessions.
@@ -67,15 +68,15 @@ type Session interface {
 	ID() string
 
 	// Property retrieves the value of the given property key.
-	Property(SessionProperty) (string, error)
+	Property(context.Context, SessionProperty) (string, error)
 	// Properties retrieves the values of all the given property keys.
-	Properties(...SessionProperty) (map[SessionProperty]string, error)
+	Properties(context.Context, ...SessionProperty) (map[SessionProperty]string, error)
 
 	// Rename this tmux session to have the given name.
-	Rename(string) error
+	Rename(context.Context, string) error
 
 	// Kill this tmux session.
-	Kill() error
+	Kill(context.Context) error
 }
 
 type SessionProperty string
@@ -88,12 +89,12 @@ const (
 
 type Client interface {
 	// Property retrieves the value of the given property key.
-	Property(ClientProperty) (string, error)
+	Property(context.Context, ClientProperty) (string, error)
 	// Properties retrieves the values of all the given property keys.
-	Properties(...ClientProperty) (map[ClientProperty]string, error)
+	Properties(context.Context, ...ClientProperty) (map[ClientProperty]string, error)
 
 	// DisplayMenu displays a menu in this client.
-	DisplayMenu([]MenuElement) error
+	DisplayMenu(context.Context, []MenuElement) error
 }
 
 type ClientProperty string

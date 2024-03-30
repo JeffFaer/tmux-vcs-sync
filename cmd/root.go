@@ -1,12 +1,16 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"plugin"
+	"runtime/trace"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,6 +26,10 @@ var (
 		slog.LevelInfo,
 		slog.LevelDebug,
 	}
+
+	doTrace   bool
+	traceFile *os.File
+	traceTask *trace.Task
 )
 
 var rootCmd = &cobra.Command{
@@ -31,13 +39,24 @@ var rootCmd = &cobra.Command{
 	CompletionOptions: cobra.CompletionOptions{
 		HiddenDefaultCmd: true,
 	},
-	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if par := cmd.Parent(); par != nil && par.Name() == "completion" {
 			return nil
 		}
 
 		configureLogging()
-		if err := loadPlugins(); err != nil {
+		ctx, err := startTrace(cmd, args)
+		if err != nil {
+			return err
+		}
+		cmd.SetContext(ctx)
+		if err := loadPlugins(ctx); err != nil {
+			return err
+		}
+		return nil
+	},
+	PersistentPostRunE: func(*cobra.Command, []string) error {
+		if err := stopTrace(); err != nil {
 			return err
 		}
 		return nil
@@ -46,6 +65,10 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().CountVarP(&verbosity, "verbose", "v", "Log more verbosely.")
+	rootCmd.PersistentFlags().BoolVar(&doTrace, "trace", false, "Whether to record an execution trace or not.")
+	if err := rootCmd.PersistentFlags().MarkHidden("trace"); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func configureLogging() {
@@ -55,7 +78,51 @@ func configureLogging() {
 	})))
 }
 
-func loadPlugins() error {
+func startTrace(cmd *cobra.Command, args []string) (context.Context, error) {
+	if !doTrace {
+		return cmd.Context(), nil
+	}
+	dir, err := config.TraceDir()
+	if err != nil {
+		return nil, err
+	}
+	traceFile, err = os.OpenFile(filepath.Join(dir, fmt.Sprintf("trace_%s.out", time.Now().Format(time.RFC3339Nano))), os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, err
+	}
+	if err := trace.Start(traceFile); err != nil {
+		return nil, fmt.Errorf("trace.Start(): %w", err)
+	}
+	slog.Debug("Started tracing.")
+
+	ctx := cmd.Context()
+	var cmds []string
+	for ; cmd != nil; cmd = cmd.Parent() {
+		cmds = append(cmds, cmd.Name())
+	}
+	slices.Reverse(cmds)
+	cmds = append(cmds, args...)
+
+	ctx, traceTask = trace.NewTask(ctx, strings.Join(cmds, " "))
+	return ctx, nil
+}
+
+func stopTrace() error {
+	if !doTrace {
+		return nil
+	}
+	traceTask.End()
+	trace.Stop()
+	slog.Warn("Trace recorded.", "file", traceFile.Name())
+	if err := traceFile.Close(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func loadPlugins(ctx context.Context) error {
+	defer trace.StartRegion(ctx, "loading plugins").End()
+
 	dir, err := config.PluginDir()
 	if err != nil {
 		return err
@@ -70,13 +137,15 @@ func loadPlugins() error {
 		if de.IsDir() {
 			continue
 		}
-		if strings.HasSuffix(de.Name(), ".so") {
-			path := filepath.Join(dir, de.Name())
-			if _, err := plugin.Open(path); err != nil {
-				errs = append(errs, fmt.Errorf("%s: %w", path, err))
-			} else {
-				loaded++
-			}
+		if !strings.HasSuffix(de.Name(), ".so") {
+			continue
+		}
+
+		path := filepath.Join(dir, de.Name())
+		if err := loadPlugin(ctx, path); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", path, err))
+		} else {
+			loaded++
 		}
 	}
 	if loaded == 0 {
@@ -92,6 +161,12 @@ func loadPlugins() error {
 	return nil
 }
 
-func Execute() error {
-	return rootCmd.Execute()
+func loadPlugin(ctx context.Context, file string) error {
+	defer trace.StartRegion(ctx, filepath.Base(file)).End()
+	_, err := plugin.Open(file)
+	return err
+}
+
+func Execute(ctx context.Context) error {
+	return rootCmd.ExecuteContext(ctx)
 }
