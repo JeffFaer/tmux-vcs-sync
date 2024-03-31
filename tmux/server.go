@@ -27,10 +27,10 @@ func SameServer(ctx context.Context, a, b Server) bool {
 	return pid1 == pid2
 }
 
-// Server represents a tmux server that exists at a particular Socket.
-// If Socket is unset, we will use the default tmux socket.
 type server struct {
 	opts serverOptions
+
+	tmux exec.Commander
 }
 
 // NewServer creates a new server for the given socket.
@@ -41,7 +41,7 @@ func NewServer(opts ...ServerOption) *server {
 	for _, o := range opts {
 		o(&opt)
 	}
-	return &server{opt}
+	return &server{opt, tmux}
 }
 
 type ServerOption func(*serverOptions)
@@ -122,7 +122,7 @@ func (srv *server) LogValue() slog.Value {
 
 func (srv *server) command(ctx context.Context, args ...string) *exec.Command {
 	args = append(srv.opts.args(), args...)
-	return tmux.Command(ctx, args...)
+	return srv.tmux.Command(ctx, args...)
 }
 
 func (srv *server) PID(ctx context.Context) (int, error) {
@@ -133,7 +133,7 @@ func (srv *server) PID(ctx context.Context) (int, error) {
 	return strconv.Atoi(pid)
 }
 
-func (srv *server) ListSessions(ctx context.Context) ([]Session, error) {
+func (srv *server) ListSessions(ctx context.Context) (Sessions, error) {
 	stdout, stderr, err := srv.command(ctx, "list-sessions", "-F", string(SessionID)).RunOutput()
 	if err != nil {
 		if
@@ -146,7 +146,7 @@ func (srv *server) ListSessions(ctx context.Context) ([]Session, error) {
 		fmt.Fprintln(os.Stderr, stderr)
 		return nil, err
 	}
-	var res []Session
+	var res sessions
 	for _, id := range strings.Split(stdout, "\n") {
 		res = append(res, &session{srv, id})
 	}

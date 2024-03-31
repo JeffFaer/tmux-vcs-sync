@@ -35,8 +35,8 @@ func NewServer(pid int) *Server {
 
 func (srv *Server) PID(context.Context) (int, error) { return srv.pid, nil }
 
-func (srv *Server) ListSessions(context.Context) ([]tmux.Session, error) {
-	var ret []tmux.Session
+func (srv *Server) ListSessions(context.Context) (tmux.Sessions, error) {
+	var ret Sessions
 	for _, sesh := range srv.sessions {
 		if sesh.dead {
 			continue
@@ -98,6 +98,46 @@ func (srv *Server) Kill(context.Context) error {
 	srv.sessions = nil
 	srv.CurrentSession = nil
 	return nil
+}
+
+type Sessions []*Session
+
+var _ tmux.Sessions = (Sessions)(nil)
+
+func (s Sessions) Server() tmux.Server {
+	return s[0].Server()
+}
+
+func (s Sessions) Sessions() []tmux.Session {
+	ret := make([]tmux.Session, len(s))
+	for i, sesh := range s {
+		ret[i] = sesh
+	}
+	return ret
+}
+
+func (s Sessions) Property(ctx context.Context, prop tmux.SessionProperty) (map[tmux.Session]string, error) {
+	vals, err := s.Properties(ctx, prop)
+	if err != nil {
+		return nil, err
+	}
+	ret := make(map[tmux.Session]string, len(vals))
+	for sesh, props := range vals {
+		ret[sesh] = props[prop]
+	}
+	return ret, nil
+}
+
+func (s Sessions) Properties(ctx context.Context, props ...tmux.SessionProperty) (map[tmux.Session]map[tmux.SessionProperty]string, error) {
+	ret := make(map[tmux.Session]map[tmux.SessionProperty]string, len(s))
+	for _, sesh := range s {
+		var err error
+		ret[sesh], err = sesh.Properties(ctx, props...)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return ret, nil
 }
 
 type Session struct {

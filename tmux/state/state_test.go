@@ -590,8 +590,7 @@ var compareSimplifiedTmuxState = cmp.Options{
 
 func simplifyTmuxState(ctx context.Context, srv tmux.Server) simplifiedTmuxState {
 	var ret simplifiedTmuxState
-	for _, sesh := range must(srv.ListSessions(ctx)) {
-		props := must(sesh.Properties(ctx, tmux.SessionName, tmux.SessionPath))
+	for sesh, props := range must(must(srv.ListSessions(ctx)).Properties(ctx, tmux.SessionName, tmux.SessionPath)) {
 		ret.Sessions = append(ret.Sessions, simplifiedSessionState{
 			ID:   sesh.ID(),
 			Name: props[tmux.SessionName],
