@@ -116,6 +116,8 @@ func (all VersionControlSystems) MaybeCurrentRepository(ctx context.Context) (Re
 // directory.
 // Returns nil, nil if no such Repository can be found.
 func (all VersionControlSystems) MaybeFindRepository(ctx context.Context, dir string) (Repository, error) {
+	defer trace.StartRegion(ctx, "VersionControlSystems.MaybeFindRepository()").End()
+	trace.Log(ctx, "directory", dir)
 	if len(all) == 0 {
 		return nil, fmt.Errorf("no registered VCS")
 	}
@@ -133,7 +135,6 @@ func (all VersionControlSystems) MaybeFindRepository(ctx context.Context, dir st
 // Returns nil, nil if fn never yields a Repository (or an error).
 func MaybeFindRepository[T any](ctx context.Context, elems []T, fn func(T) (Repository, error)) (Repository, error) {
 	defer trace.StartRegion(ctx, "api.MaybeFindRepository()").End()
-
 	var repos []Repository
 	var errs []error
 	for _, e := range elems {

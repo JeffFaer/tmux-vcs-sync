@@ -9,6 +9,7 @@ import (
 	"runtime/trace"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/JeffFaer/go-stdlib-ext/morecmp"
 	"github.com/JeffFaer/tmux-vcs-sync/api"
@@ -48,41 +49,65 @@ func New(ctx context.Context, srv tmux.Server, vcs api.VersionControlSystems) (*
 		repos:            make(map[RepoName]api.Repository),
 		unknownSessions:  make(map[string]tmux.Session),
 	}
-	// An index from directory to api.Repository.
-	// This tool makes tmux sessions with the repository's root dir, so there's a
-	// pretty good chance for some cache hits here.
-	reposByDir := make(map[string]api.Repository)
 	props, err := sessions.Properties(ctx, tmux.SessionName, tmux.SessionPath)
 	if err != nil {
 		return nil, fmt.Errorf("could not resolve session properties: %w", err)
 	}
-	for _, sesh := range sessions.Sessions() {
-		name, path := props[sesh][tmux.SessionName], props[sesh][tmux.SessionPath]
-		logger := slog.Default().With("id", sesh.ID(), "session_name", name)
-		logger.Debug("Checking for repository in tmux session.")
 
-		repo, ok := reposByDir[path]
-		if !ok {
-			var err error
-			repo, err = vcs.MaybeFindRepository(ctx, path)
+	sessionsByPath := make(map[string][]tmux.Session)
+	for sesh, props := range props {
+		// This tool makes tmux sessions with the repository's root dir as the
+		// session path. There's a pretty good chance we'll have multiple sessions
+		// with the same exact session path.
+		sessionsByPath[props[tmux.SessionPath]] = append(sessionsByPath[props[tmux.SessionPath]], sesh)
+	}
+
+	type result struct {
+		sessions []tmux.Session
+		api.Repository
+	}
+	results := make(chan result, len(sessionsByPath))
+	var wg sync.WaitGroup
+	for path, sessions := range sessionsByPath {
+		wg.Add(1)
+		go func(path string, sessions []tmux.Session) {
+			defer wg.Done()
+			logger := slog.With("directory", path)
+			logger.Debug("Checking for repository in directory.")
+
+			repo, err := vcs.MaybeFindRepository(ctx, path)
 			if err != nil {
-				logger.Warn("Error while checking for repository in tmux session.", "error", err)
+				logger.Warn("Error while checking for repository in directory.", "error", err)
+				return
+			}
+			results <- result{sessions, repo}
+		}(path, sessions)
+	}
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	for result := range results {
+		sessions, repo := result.sessions, result.Repository
+		if repo != nil {
+			st.repos[NewRepoName(repo)] = repo
+		}
+		for _, sesh := range sessions {
+			name := props[sesh][tmux.SessionName]
+			logger := slog.With("id", sesh.ID(), "session_name", name)
+			if repo == nil {
+				st.unknownSessions[name] = sesh
+				logger.Info("Not a repository.")
 				continue
 			}
-			reposByDir[path] = repo
-		}
-		if repo == nil {
-			st.unknownSessions[name] = sesh
-			logger.Info("Not a repository.")
-			continue
-		}
 
-		parsed := ParseSessionName(repo, name)
-		st.sessionsByName[parsed] = sesh
-		st.sessionsByID[sesh.ID()] = workUnit{repo, parsed.WorkUnit}
-		st.unqualifiedRepos[parsed.Repo]++
-		st.repos[parsed.RepoName] = repo
-		logger.Info("Found work unit in tmux session.", "name", parsed)
+			parsed := ParseSessionName(repo, name)
+			st.sessionsByName[parsed] = sesh
+			st.sessionsByID[sesh.ID()] = workUnit{repo, parsed.WorkUnit}
+			st.unqualifiedRepos[parsed.Repo]++
+			logger.Info("Found work unit in tmux session.", "name", parsed)
+		}
 	}
 	return st, nil
 }
