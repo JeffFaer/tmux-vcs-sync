@@ -33,7 +33,27 @@ var updateCommand = &cobra.Command{
 3. If given a work unit name, it will attempt to find that work unit in any of the repositories currently active in tmux and update both tmux and that VCS to point at the given work unit. Note: This means that you can update to a work unit that exists in a different repository.`,
 	Args: cobra.RangeArgs(0, 1),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return suggestWorkUnitNames(cmd.Context(), toComplete), 0
+		var quoted bool
+		if strings.HasPrefix(toComplete, `"`) {
+			quoted = true
+			toComplete = toComplete[1:]
+		} else {
+			unescaped, err := shellquote.Split(toComplete)
+			if err != nil {
+				slog.Warn("Couldn't unescape input.", "input", toComplete, "error", err)
+			} else {
+				toComplete = strings.Join(unescaped, " ")
+			}
+		}
+		suggestions := suggestWorkUnitNames(cmd.Context(), state.ParseSessionNameWithoutKnownRepository(toComplete))
+		for i, s := range suggestions {
+			if quoted {
+				suggestions[i] = `"` + s + `"`
+			} else {
+				suggestions[i] = shellquote.Join(s)
+			}
+		}
+		return suggestions, 0
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
@@ -43,41 +63,68 @@ var updateCommand = &cobra.Command{
 	},
 }
 
-func suggestWorkUnitNames(ctx context.Context, toComplete string) []string {
-	vcs := api.Registered()
-	repos := make(map[state.RepoName]api.Repository)
-	if srv := tmux.MaybeCurrentServer(); srv != nil {
-		st, err := state.New(ctx, srv, vcs)
-		if err != nil {
-			slog.Warn("Could not determine repositories from tmux server.", "server", srv, "error", err)
-		} else {
-			repos = st.Repositories()
-		}
-	}
-	cur, err := vcs.MaybeCurrentRepository(ctx)
-	if err != nil {
-		slog.Warn("Could not determine current repository.", "error", err)
-	} else {
-		repos[state.NewRepoName(cur)] = cur
-	}
+func suggestWorkUnitNames(ctx context.Context, toComplete state.WorkUnitName) []string {
+	curRepo, repos := discoverRepositories(ctx, api.Registered())
 
 	var suggestions []string
 	for name, repo := range repos {
-		wus, err := repo.List(ctx, "")
+		if toComplete.Repo != "" {
+			if toComplete.Repo != name.Repo {
+				// toComplete looks something like "foo>"
+				continue
+			}
+		} else if repo != curRepo && !strings.HasPrefix(name.Repo, toComplete.WorkUnit) {
+			// toComplete looks something like "foo"
+			continue
+		}
+
+		var prefix string
+		if toComplete.Repo != "" || repo == curRepo {
+			prefix = toComplete.WorkUnit
+		}
+
+		wus, err := repo.List(ctx, prefix)
 		if err != nil {
 			slog.Warn("Could not list work units.", "repo", name, "error", err)
 			continue
 		}
 		for _, wu := range wus {
-			if repo != cur {
+			if repo != curRepo {
 				wu = state.NewWorkUnitName(repo, wu).RepoString()
 			}
-			wu = shellquote.Join(wu)
 			suggestions = append(suggestions, wu)
 		}
 	}
-	suggestions = slices.DeleteFunc(suggestions, func(s string) bool { return !strings.HasPrefix(s, toComplete) })
+	suggestions = slices.DeleteFunc(suggestions, func(s string) bool { return !strings.HasPrefix(s, toComplete.String()) })
 	return suggestions
+}
+
+func discoverRepositories(ctx context.Context, vcs api.VersionControlSystems) (current api.Repository, all map[state.RepoName]api.Repository) {
+	repos := make(map[state.RepoName]api.Repository)
+	if sesh := tmux.MaybeCurrentSession(); sesh != nil {
+		st, err := state.New(ctx, sesh.Server(), vcs)
+		if err != nil {
+			slog.Warn("Could not determine repositories from tmux server.", "server", sesh.Server(), "error", err)
+		} else {
+			repos = st.Repositories()
+			repo, _, err := st.WorkUnit(ctx, sesh)
+			if err != nil {
+				slog.Warn("Could not determine current repository from tmux.", "server", sesh.Server(), "error", err)
+			} else {
+				return repo, repos
+			}
+		}
+	}
+
+	// If we're not in tmux or weren't able to discover the current repo from
+	// tmux, check for it directly.
+	cur, err := vcs.MaybeCurrentRepository(ctx)
+	if err != nil {
+		slog.Warn("Could not determine current repository.", "error", err)
+		return nil, repos
+	}
+	repos[state.NewRepoName(cur)] = cur
+	return cur, repos
 }
 
 func update(ctx context.Context) error {

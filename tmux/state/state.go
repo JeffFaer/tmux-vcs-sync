@@ -140,7 +140,7 @@ func (st *State) WorkUnit(ctx context.Context, sesh tmux.Session) (api.Repositor
 	}
 	n, ok := st.sessionsByID[sesh.ID()]
 	if !ok {
-		return nil, "", fmt.Errorf("sesh does not have an associated work unit")
+		return nil, "", nil
 	}
 	return n.repo, n.workUnitName, nil
 }
