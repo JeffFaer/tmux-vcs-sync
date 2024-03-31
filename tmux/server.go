@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -11,25 +12,25 @@ import (
 )
 
 // Equal determines if two servers equivalent, based on PID.
-func SameServer(a, b Server) bool {
+func SameServer(ctx context.Context, a, b Server) bool {
 	if a == b {
 		return true
 	}
-	pid1, err := a.PID()
+	pid1, err := a.PID(ctx)
 	if err != nil {
 		return false
 	}
-	pid2, err := b.PID()
+	pid2, err := b.PID(ctx)
 	if err != nil {
 		return false
 	}
 	return pid1 == pid2
 }
 
-// Server represents a tmux server that exists at a particular Socket.
-// If Socket is unset, we will use the default tmux socket.
 type server struct {
 	opts serverOptions
+
+	tmux exec.Commander
 }
 
 // NewServer creates a new server for the given socket.
@@ -40,7 +41,7 @@ func NewServer(opts ...ServerOption) *server {
 	for _, o := range opts {
 		o(&opt)
 	}
-	return &server{opt}
+	return &server{opt, tmux}
 }
 
 type ServerOption func(*serverOptions)
@@ -119,21 +120,21 @@ func (srv *server) LogValue() slog.Value {
 	}
 }
 
-func (srv *server) command(args ...string) *exec.Command {
+func (srv *server) command(ctx context.Context, args ...string) *exec.Command {
 	args = append(srv.opts.args(), args...)
-	return tmux.Command(args...)
+	return srv.tmux.Command(ctx, args...)
 }
 
-func (srv *server) PID() (int, error) {
-	pid, err := srv.command("display-message", "-p", "-F", "#{pid}").RunStdout()
+func (srv *server) PID(ctx context.Context) (int, error) {
+	pid, err := srv.command(ctx, "display-message", "-p", "-F", "#{pid}").RunStdout()
 	if err != nil {
 		return 0, err
 	}
 	return strconv.Atoi(pid)
 }
 
-func (srv *server) ListSessions() ([]Session, error) {
-	stdout, stderr, err := srv.command("list-sessions", "-F", string(SessionID)).RunOutput()
+func (srv *server) ListSessions(ctx context.Context) (Sessions, error) {
+	stdout, stderr, err := srv.command(ctx, "list-sessions", "-F", string(SessionID)).RunOutput()
 	if err != nil {
 		if
 		// Socket doesn't yet exists.
@@ -145,15 +146,15 @@ func (srv *server) ListSessions() ([]Session, error) {
 		fmt.Fprintln(os.Stderr, stderr)
 		return nil, err
 	}
-	var res []Session
+	var res sessions
 	for _, id := range strings.Split(stdout, "\n") {
 		res = append(res, &session{srv, id})
 	}
 	return res, nil
 }
 
-func (srv *server) ListClients() ([]Client, error) {
-	stdout, err := srv.command("list-clients", "-F", string(ClientTTY)).RunStdout()
+func (srv *server) ListClients(ctx context.Context) ([]Client, error) {
+	stdout, err := srv.command(ctx, "list-clients", "-F", string(ClientTTY)).RunStdout()
 	if err != nil {
 		return nil, err
 	}
@@ -167,10 +168,10 @@ func (srv *server) ListClients() ([]Client, error) {
 	return res, nil
 }
 
-func (srv *server) NewSession(opts NewSessionOptions) (Session, error) {
+func (srv *server) NewSession(ctx context.Context, opts NewSessionOptions) (Session, error) {
 	args := []string{"new-session", "-d", "-P", "-F", string(SessionID)}
 	args = append(args, opts.args()...)
-	newSession := srv.command(args...)
+	newSession := srv.command(ctx, args...)
 	newSession.Stdin = os.Stdin // tmux wants a tty.
 	stdout, err := newSession.RunStdout()
 	if err != nil {
@@ -179,16 +180,16 @@ func (srv *server) NewSession(opts NewSessionOptions) (Session, error) {
 	return &session{srv, stdout}, nil
 }
 
-func (srv *server) AttachOrSwitch(s Session) error {
-	if !SameServer(srv, s.Server()) {
+func (srv *server) AttachOrSwitch(ctx context.Context, s Session) error {
+	if !SameServer(ctx, srv, s.Server()) {
 		return fmt.Errorf("target session does not exist in this server")
 	}
 	var cmd *exec.Command
 	var err error
 	if os.Getenv("TMUX") != "" {
-		cmd, err = srv.switchCommand(s)
+		cmd, err = srv.switchCommand(ctx, s)
 	} else {
-		cmd, err = srv.attachCommand(s)
+		cmd, err = srv.attachCommand(ctx, s)
 	}
 	if err != nil {
 		return err
@@ -196,18 +197,18 @@ func (srv *server) AttachOrSwitch(s Session) error {
 	return cmd.Run()
 }
 
-func (srv *server) attachCommand(s Session) (*exec.Command, error) {
-	cmd := srv.command("attach-session", "-t", s.ID())
+func (srv *server) attachCommand(ctx context.Context, s Session) (*exec.Command, error) {
+	cmd := srv.command(ctx, "attach-session", "-t", s.ID())
 	cmd.Stdin = os.Stdin // tmux wants a tty.
 	return cmd, nil
 }
 
-func (srv *server) switchCommand(s Session) (*exec.Command, error) {
-	cmd := srv.command("switch-client", "-t", s.ID())
+func (srv *server) switchCommand(ctx context.Context, s Session) (*exec.Command, error) {
+	cmd := srv.command(ctx, "switch-client", "-t", s.ID())
 	cmd.Stdin = os.Stdin // tmux wants a tty.
 	return cmd, nil
 }
 
-func (srv *server) Kill() error {
-	return srv.command("kill-server").Run()
+func (srv *server) Kill(ctx context.Context) error {
+	return srv.command(ctx, "kill-server").Run()
 }
