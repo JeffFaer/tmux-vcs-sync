@@ -276,6 +276,10 @@ func testList(ctx context.Context, t *testing.T, ctor repoCtor, opts Options) {
 			Prefix: "abcd",
 			Want:   []string{"abcd1", "abcd2"},
 		},
+		{
+			Prefix: "nothingStartsWithThisPrefix",
+			Want:   nil,
+		},
 	}, opts.ExtraListWorkUnitPrefixes...)
 	for _, tc := range tcs {
 		t.Run(fmt.Sprintf("prefix=%q", tc.Prefix), func(t *testing.T) {

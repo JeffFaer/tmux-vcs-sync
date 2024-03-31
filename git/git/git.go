@@ -148,6 +148,9 @@ func (repo *gitRepo) List(ctx context.Context, prefix string) ([]string, error) 
 	if err != nil {
 		return nil, err
 	}
+	if stdout == "" {
+		return nil, nil
+	}
 	return strings.Split(stdout, "\n"), nil
 }
 
