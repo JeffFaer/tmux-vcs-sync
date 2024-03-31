@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/JeffFaer/tmux-vcs-sync/api/exec"
+	"github.com/JeffFaer/tmux-vcs-sync/api/exec/exectest"
 	"github.com/avast/retry-go/v4"
 	"github.com/creack/pty"
 	"github.com/google/go-cmp/cmp"
@@ -42,6 +43,7 @@ type TestServer struct {
 func NewServerForTesting(ctx context.Context, t *testing.T) TestServer {
 	n := fmt.Sprintf("%s-%s", t.Name(), randomString())
 	srv := NewServer(NamedServerSocket(n), ServerConfigFile("/dev/null"))
+	srv.tmux = exectest.NewTestCommander(t, tmux)
 	socketPath, err := srv.command(ctx, "start-server", ";", "display-message", "-p", "#{socket_path}").RunStdout()
 	if err != nil {
 		t.Fatalf("Could not determine tmux server socket path")
@@ -72,16 +74,15 @@ func (srv TestServer) MustNewSession(ctx context.Context, opts NewSessionOptions
 	return TestSession{sesh.(*session), srv.t}
 }
 
-func (srv TestServer) MustListSessions(ctx context.Context) []TestSession {
-	sessions, err := srv.ListSessions(ctx)
+func (srv TestServer) MustListSessions(ctx context.Context) TestSessions {
+	val, err := srv.ListSessions(ctx)
 	if err != nil {
 		srv.t.Fatal(err)
 	}
-	res := make([]TestSession, len(sessions))
-	for i, sesh := range sessions {
-		res[i] = TestSession{sesh.(*session), srv.t}
+	if val == nil {
+		return TestSessions{nil, srv.t}
 	}
-	return res
+	return TestSessions{val.(sessions), srv.t}
 }
 
 func (srv TestServer) mustAttachCommand(ctx context.Context, s Session) *exec.Command {
@@ -110,6 +111,11 @@ func (srv TestServer) MustListClients(ctx context.Context) []TestClient {
 		res[i] = TestClient{c.(*client), srv.t}
 	}
 	return res
+}
+
+type TestSessions struct {
+	sessions
+	t *testing.T
 }
 
 type TestSession struct {
@@ -175,8 +181,8 @@ func TestServer_Sessions(t *testing.T) {
 	srv := NewServerForTesting(ctx, t)
 
 	sessions := srv.MustListSessions(ctx)
-	if len(sessions) != 0 {
-		t.Errorf("New tmux server has %d sessions, expected 0", len(sessions))
+	if n := len(sessions.Sessions()); n != 0 {
+		t.Errorf("New tmux server has %d sessions, expected 0", n)
 	}
 
 	a := srv.MustNewSession(ctx, NewSessionOptions{Name: "a"})
@@ -184,14 +190,14 @@ func TestServer_Sessions(t *testing.T) {
 	c := srv.MustNewSession(ctx, NewSessionOptions{Name: "c"})
 
 	sessions = srv.MustListSessions(ctx)
-	if diff := cmp.Diff([]TestSession{a, b, c}, sessions, tmuxCmpOpt(ctx)); diff != "" {
+	if diff := cmp.Diff([]Session{a.session, b.session, c.session}, sessions.Sessions(), tmuxCmpOpt(ctx)); diff != "" {
 		t.Errorf("srv.ListSessions() diff (-want +got)\n%s", diff)
 	}
 
 	b.MustKill(ctx)
 
 	sessions = srv.MustListSessions(ctx)
-	if diff := cmp.Diff([]TestSession{a, c}, sessions, tmuxCmpOpt(ctx)); diff != "" {
+	if diff := cmp.Diff([]Session{a.session, c.session}, sessions.Sessions(), tmuxCmpOpt(ctx)); diff != "" {
 		t.Errorf("srv.ListSessions() diff (-want +got)\n%s", diff)
 	}
 }

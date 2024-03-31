@@ -17,7 +17,9 @@ import (
 )
 
 type State struct {
-	srv tmux.Server
+	srv      tmux.Server
+	sessions tmux.Sessions
+
 	// tmux sessions in srv with their associated repositories.
 	sessionsByName map[WorkUnitName]tmux.Session
 	sessionsByID   map[string]workUnit
@@ -39,6 +41,7 @@ func New(ctx context.Context, srv tmux.Server, vcs api.VersionControlSystems) (*
 
 	st := &State{
 		srv:              srv,
+		sessions:         sessions,
 		sessionsByName:   make(map[WorkUnitName]tmux.Session),
 		sessionsByID:     make(map[string]workUnit),
 		unqualifiedRepos: make(map[string]int),
@@ -49,16 +52,14 @@ func New(ctx context.Context, srv tmux.Server, vcs api.VersionControlSystems) (*
 	// This tool makes tmux sessions with the repository's root dir, so there's a
 	// pretty good chance for some cache hits here.
 	reposByDir := make(map[string]api.Repository)
-	for _, sesh := range sessions {
-		logger := slog.Default().With("id", sesh.ID())
+	props, err := sessions.Properties(ctx, tmux.SessionName, tmux.SessionPath)
+	if err != nil {
+		return nil, fmt.Errorf("could not resolve session properties: %w", err)
+	}
+	for _, sesh := range sessions.Sessions() {
+		name, path := props[sesh][tmux.SessionName], props[sesh][tmux.SessionPath]
+		logger := slog.Default().With("id", sesh.ID(), "session_name", name)
 		logger.Debug("Checking for repository in tmux session.")
-		props, err := sesh.Properties(ctx, tmux.SessionName, tmux.SessionPath)
-		if err != nil {
-			return nil, err
-		}
-		name, path := props[tmux.SessionName], props[tmux.SessionPath]
-		logger = logger.With("session_name", name)
-		logger.Debug("Resolved tmux session properties.")
 
 		repo, ok := reposByDir[path]
 		if !ok {
@@ -250,14 +251,13 @@ func (st *State) PruneSessions(ctx context.Context) error {
 func (st *State) updateSessionNames(ctx context.Context) error {
 	defer trace.StartRegion(ctx, "State.updateSessionNames()").End()
 
+	names, err := st.sessions.Property(ctx, tmux.SessionName)
+	if err != nil {
+		return fmt.Errorf("could not resolve session names: %w", err)
+	}
 	var errs []error
 	for k, sesh := range st.sessionsByName {
-		name, err := sesh.Property(ctx, tmux.SessionName)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		if want := st.SessionName(k); name != want {
+		if got, want := names[sesh], st.SessionName(k); got != want {
 			if err := sesh.Rename(ctx, want); err != nil {
 				errs = append(errs, err)
 				continue

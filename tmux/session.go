@@ -12,7 +12,80 @@ func SameSession(ctx context.Context, a, b Session) bool {
 	return a.ID() == b.ID() && SameServer(ctx, a.Server(), b.Server())
 }
 
-// Session represents a tmux session on a particular server.
+type sessions []*session
+
+func (s sessions) Server() Server {
+	return s.server()
+}
+
+func (s sessions) server() *server {
+	return s[0].srv
+}
+
+func (s sessions) Sessions() []Session {
+	ret := make([]Session, len(s))
+	for i, sesh := range s {
+		ret[i] = sesh
+	}
+	return ret
+}
+
+func (s sessions) Property(ctx context.Context, prop SessionProperty) (map[Session]string, error) {
+	vals, err := s.Properties(ctx, prop)
+	if err != nil {
+		return nil, err
+	}
+	ret := make(map[Session]string, len(vals))
+	for sesh, props := range vals {
+		ret[sesh] = props[prop]
+	}
+	return ret, nil
+}
+
+func (s sessions) Properties(ctx context.Context, props ...SessionProperty) (map[Session]map[SessionProperty]string, error) {
+	if len(s) == 0 {
+		return nil, nil
+	}
+
+	propStrings := make([]string, len(props)+1)
+	propStrings[0] = string(SessionID)
+	for i, prop := range props {
+		propStrings[i+1] = string(prop)
+	}
+
+	format := strings.Join(propStrings, "\n")
+
+	seshByID := make(map[string]Session, len(s))
+	idFilters := make([]string, len(s))
+	for i, sesh := range s {
+		seshByID[sesh.id] = sesh
+		idFilters[i] = fmt.Sprintf("#{==:%s,%s}", SessionID, sesh.ID())
+	}
+
+	filter := idFilters[0]
+	for _, idFilter := range idFilters[1:] {
+		filter = fmt.Sprintf("#{||:%s,%s}", filter, idFilter)
+	}
+
+	stdout, err := s.server().command(ctx, "list-sessions", "-F", format, "-f", filter).RunStdout()
+	if err != nil {
+		return nil, err
+	}
+
+	ret := make(map[Session]map[SessionProperty]string, len(s))
+	lines := strings.Split(stdout, "\n")
+	for i := 0; i < len(lines); i++ {
+		id := lines[i]
+		vals := make(map[SessionProperty]string, len(props))
+		for _, prop := range props {
+			i++
+			vals[prop] = lines[i]
+		}
+		ret[seshByID[id]] = vals
+	}
+	return ret, nil
+}
+
 type session struct {
 	srv *server
 	id  string
@@ -58,17 +131,11 @@ func (s *session) Property(ctx context.Context, prop SessionProperty) (string, e
 
 // Properties fetches properties about a session.
 func (s *session) Properties(ctx context.Context, props ...SessionProperty) (map[SessionProperty]string, error) {
-	res, err := properties(props, func(keys []string) ([]string, error) {
-		stdout, err := s.srv.command(ctx, "display-message", "-t", s.id, "-p", strings.Join(keys, "\n")).RunStdout()
-		if err != nil {
-			return nil, err
-		}
-		return strings.Split(stdout, "\n"), nil
-	})
+	vals, err := sessions{s}.Properties(ctx, props...)
 	if err != nil {
-		return nil, fmt.Errorf("session %q: %w", s.id, err)
+		return nil, err
 	}
-	return res, nil
+	return vals[Session(s)], nil
 }
 
 func (s *session) Rename(ctx context.Context, name string) error {

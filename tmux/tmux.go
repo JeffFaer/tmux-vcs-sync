@@ -29,7 +29,7 @@ type Server interface {
 	PID(context.Context) (int, error)
 
 	// ListSessions lists the sessions that exist in this tmux server.
-	ListSessions(context.Context) ([]Session, error)
+	ListSessions(context.Context) (Sessions, error)
 	// ListClients lists all clients currently attached to this tmux server.
 	ListClients(context.Context) ([]Client, error)
 
@@ -59,6 +59,23 @@ func (opts NewSessionOptions) args() []string {
 		res = append(res, []string{"-c", opts.StartDir}...)
 	}
 	return res
+}
+
+// Sessions is a list of Sessions, batched together so their operations are more
+// performant.
+type Sessions interface {
+	// Server returns the tmux server that these Sessions belong to.
+	Server() Server
+
+	// Sessions returns each individual Session.
+	Sessions() []Session
+
+	// Property retrieves the value of the given property key for all of these
+	// Sessions.
+	Property(context.Context, SessionProperty) (map[Session]string, error)
+	// Properties retrieves the values of all the given property keys for all of
+	// these Sessions.
+	Properties(context.Context, ...SessionProperty) (map[Session]map[SessionProperty]string, error)
 }
 
 type Session interface {
@@ -139,7 +156,7 @@ func getenv() (envVar, error) {
 }
 
 func (env envVar) server() *server {
-	return &server{serverOptions{socketPath: env.socketPath}}
+	return &server{serverOptions{socketPath: env.socketPath}, tmux}
 }
 
 func (env envVar) session() *session {
