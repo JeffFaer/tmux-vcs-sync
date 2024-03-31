@@ -103,6 +103,10 @@ func configureLogging() {
 
 func startTrace(cmd *cobra.Command, args []string) (context.Context, error) {
 	start = time.Now()
+	if cmd.Name() == cobra.ShellCompRequestCmd && slices.Contains(args, "--trace") {
+		// cobra.ShellCompRequestCmd disables flag parsing.
+		doTrace = true
+	}
 	if doTrace {
 		var err error
 		traceFile, err = createTraceFile(fmt.Sprintf("%s_%s.out", cmd.Name(), start.Format(time.RFC3339Nano)))
