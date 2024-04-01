@@ -170,5 +170,5 @@ $ go work use . api git
     - cmd update.go completion suggestions
   - tmux hooks to automatically update session names when a session closes.
   - Optimization ideas
-    - Combine List with Sort for display_menu.
-    - Combine Current and Update for update.
+    - Add an existence filter to Sort for display_menu.
+    - Do blind Updates in update (will need to know whether anything changed).
