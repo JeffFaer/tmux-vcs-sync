@@ -100,13 +100,8 @@ func MaybeCurrentServer() Server {
 	return srv
 }
 
-// CurrentServerOrDefault either returns the CurrentServer, or the default server.
-func CurrentServerOrDefault() (Server, bool) {
-	srv := MaybeCurrentServer()
-	if srv == nil {
-		return &server{}, false
-	}
-	return srv, true
+func DefaultServer() Server {
+	return &server{}
 }
 
 func (srv *server) LogValue() slog.Value {

@@ -140,7 +140,7 @@ func update(ctx context.Context) error {
 	curSesh := tmux.MaybeCurrentSession()
 	if curSesh == nil {
 		// Executed outside of tmux. Attach to the proper tmux session.
-		srv, _ := tmux.CurrentServerOrDefault()
+		srv := tmux.DefaultServer()
 		state, err := state.New(ctx, srv, vcs)
 		if err != nil {
 			return err
@@ -179,7 +179,11 @@ func updateTmux(ctx context.Context, st *state.State, repo api.Repository, workU
 
 func updateTo(ctx context.Context, sessionName state.WorkUnitName) error {
 	vcs := api.Registered()
-	srv, hasCurrentServer := tmux.CurrentServerOrDefault()
+	srv := tmux.MaybeCurrentServer()
+	hasCurrentServer := srv != nil
+	if !hasCurrentServer {
+		srv = tmux.DefaultServer()
+	}
 	st, err := state.New(ctx, srv, vcs)
 	if err != nil {
 		return err

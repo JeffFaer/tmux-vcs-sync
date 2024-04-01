@@ -23,7 +23,10 @@ var cleanupCommand = &cobra.Command{
 }
 
 func cleanup(ctx context.Context) error {
-	srv, _ := tmux.CurrentServerOrDefault()
+	srv := tmux.MaybeCurrentServer()
+	if srv == nil {
+		srv = tmux.DefaultServer()
+	}
 	st, err := state.New(ctx, srv, api.Registered())
 	if err != nil {
 		return err
