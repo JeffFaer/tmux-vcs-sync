@@ -32,7 +32,10 @@ func newWorkUnit(ctx context.Context, workUnitName string, ctor workUnitCtor) er
 	if err != nil {
 		return err
 	}
-	srv, _ := tmux.CurrentServerOrDefault()
+	srv := tmux.MaybeCurrentServer()
+	if srv == nil {
+		srv = tmux.DefaultServer()
+	}
 	state, err := state.New(ctx, srv, vcs)
 	if err != nil {
 		return err
