@@ -101,7 +101,7 @@ func MaybeCurrentServer() Server {
 }
 
 func DefaultServer() Server {
-	return &server{}
+	return &server{tmux: tmux}
 }
 
 func (srv *server) LogValue() slog.Value {
@@ -132,11 +132,11 @@ func (srv *server) ListSessions(ctx context.Context) (Sessions, error) {
 	stdout, stderr, err := srv.command(ctx, "list-sessions", "-F", string(SessionID)).RunOutput()
 	if err != nil {
 		if
-		// Socket doesn't yet exists.
+		// Socket doesn't yet exist.
 		strings.Contains(stderr, "No such file or directory") ||
 			// Socket exists, but no server owns it.
 			strings.Contains(stderr, "no server running") {
-			return nil, nil
+			return sessions(nil), nil
 		}
 		fmt.Fprintln(os.Stderr, stderr)
 		return nil, err
