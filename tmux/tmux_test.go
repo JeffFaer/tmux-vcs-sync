@@ -79,9 +79,6 @@ func (srv TestServer) MustListSessions(ctx context.Context) TestSessions {
 	if err != nil {
 		srv.t.Fatal(err)
 	}
-	if val == nil {
-		return TestSessions{nil, srv.t}
-	}
 	return TestSessions{val.(sessions), srv.t}
 }
 
@@ -183,6 +180,13 @@ func TestServer_Sessions(t *testing.T) {
 	sessions := srv.MustListSessions(ctx)
 	if n := len(sessions.Sessions()); n != 0 {
 		t.Errorf("New tmux server has %d sessions, expected 0", n)
+	}
+	props, err := sessions.Properties(ctx, SessionName)
+	if err != nil {
+		t.Errorf("Sessions.Properties() with 0 sessions = _, %v", err)
+	}
+	if len(props) != 0 {
+		t.Errorf("Sessions.Properties() with 0 sessions = %v, _", props)
 	}
 
 	a := srv.MustNewSession(ctx, NewSessionOptions{Name: "a"})
