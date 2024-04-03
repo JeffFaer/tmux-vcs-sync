@@ -100,18 +100,27 @@ func suggestWorkUnitNames(ctx context.Context, toComplete state.WorkUnitName) []
 }
 
 func discoverRepositories(ctx context.Context, vcs api.VersionControlSystems) (current api.Repository, all map[state.RepoName]api.Repository) {
-	repos := make(map[state.RepoName]api.Repository)
+	all = make(map[state.RepoName]api.Repository)
+	var srv tmux.Server
+	var curSesh tmux.Session
 	if sesh := tmux.MaybeCurrentSession(); sesh != nil {
-		st, err := state.New(ctx, sesh.Server(), vcs)
-		if err != nil {
-			slog.Warn("Could not determine repositories from tmux server.", "server", sesh.Server(), "error", err)
-		} else {
-			repos = st.Repositories()
-			repo, _, err := st.WorkUnit(ctx, sesh)
+		srv = sesh.Server()
+		curSesh = sesh
+	} else {
+		srv = tmux.DefaultServer()
+	}
+
+	st, err := state.New(ctx, srv, vcs)
+	if err != nil {
+		slog.Warn("Could not determine repositories from tmux server.", "server", srv, "error", err)
+	} else {
+		all = st.Repositories()
+		if curSesh != nil {
+			repo, _, err := st.WorkUnit(ctx, curSesh)
 			if err != nil {
-				slog.Warn("Could not determine current repository from tmux.", "server", sesh.Server(), "error", err)
+				slog.Warn("Could not determine current repository from tmux.", "server", srv, "error", err)
 			} else {
-				return repo, repos
+				return repo, all
 			}
 		}
 	}
@@ -121,10 +130,10 @@ func discoverRepositories(ctx context.Context, vcs api.VersionControlSystems) (c
 	cur, err := vcs.MaybeCurrentRepository(ctx)
 	if err != nil {
 		slog.Warn("Could not determine current repository.", "error", err)
-		return nil, repos
+		return nil, all
 	}
-	repos[state.NewRepoName(cur)] = cur
-	return cur, repos
+	all[state.NewRepoName(cur)] = cur
+	return cur, all
 }
 
 func update(ctx context.Context) error {
