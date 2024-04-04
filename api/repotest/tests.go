@@ -350,6 +350,11 @@ func testSort(ctx context.Context, t *testing.T, ctor repoCtor, opts Options) {
 			workUnits: []string{"wxyz"},
 			wantErr:   true,
 		},
+		{
+			name: "Empty",
+
+			workUnits: []string{},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			want := slices.Clone(tc.workUnits)
