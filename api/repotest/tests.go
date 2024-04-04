@@ -27,6 +27,10 @@ type Options struct {
 	ExtraListWorkUnitPrefixes []ListWorkUnitTestCase
 
 	Parallel bool
+
+	// The deadline to use for test cases.
+	// Defaults to 5s.
+	Deadline time.Duration
 }
 
 type ListWorkUnitTestCase struct {
@@ -37,6 +41,10 @@ type ListWorkUnitTestCase struct {
 type repoCtor func(*testing.T) api.Repository
 
 func RepoTests(t *testing.T, ctor func(context.Context, *testing.T, string) (api.Repository, error), opts Options) {
+	if opts.Deadline == 0 {
+		opts.Deadline = 5 * time.Second
+	}
+
 	for n, tc := range map[string]func(context.Context, *testing.T, repoCtor, Options){
 		"EmptyRepository": testEmptyRepository,
 		"New":             testNew,
@@ -50,7 +58,7 @@ func RepoTests(t *testing.T, ctor func(context.Context, *testing.T, string) (api
 			if opts.Parallel {
 				t.Parallel()
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), opts.Deadline)
 			defer cancel()
 			ctor := func(t *testing.T) api.Repository {
 				repo, err := ctor(ctx, t, t.Name())
