@@ -551,8 +551,8 @@ func simplifyState(t *testing.T, st *State) simplifiedState {
 	for n, sesh := range st.sessionsByName {
 		ret.WorkUnits = append(ret.WorkUnits, n)
 
-		if wu, ok := st.sessionsByID[sesh.ID()]; !ok || wu.name() != n {
-			t.Errorf("sessionsByID[%q] = %q, %t, expected %q", sesh.ID(), wu.name(), ok, n)
+		if wu, ok := st.sessionsByID[sesh.sesh.ID()]; !ok || wu.name() != n {
+			t.Errorf("sessionsByID[%q] = %q, %t, expected %q", sesh.sesh.ID(), wu.name(), ok, n)
 		}
 	}
 	for id, wu := range st.sessionsByID {
