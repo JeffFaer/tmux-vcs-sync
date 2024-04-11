@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -33,6 +34,7 @@ func newWorkUnit(ctx context.Context, workUnitName string, ctor workUnitCtor) er
 		return err
 	}
 	srv := tmux.MaybeCurrentServer()
+	hasCurrentServer := srv != nil
 	if srv == nil {
 		srv = tmux.DefaultServer()
 	}
@@ -56,10 +58,14 @@ func newWorkUnit(ctx context.Context, workUnitName string, ctor workUnitCtor) er
 	if err != nil {
 		return err
 	}
-	if err := srv.AttachOrSwitch(ctx, sesh); err != nil {
-		return fmt.Errorf("failed to attach to newly created session %q: %w", sesh.ID(), err)
+	if !hasCurrentServer {
+		// Attaching to a session hangs until the client is detached.
+		err = stopTrace()
 	}
-	return nil
+	if err1 := srv.AttachOrSwitch(ctx, sesh); err1 != nil {
+		err = errors.Join(err, fmt.Errorf("failed to attach to newly created session %q: %w", sesh.ID(), err))
+	}
+	return err
 }
 
 type sessionKey struct {

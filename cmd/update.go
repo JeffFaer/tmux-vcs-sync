@@ -92,7 +92,7 @@ func update(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		return updateTmux(ctx, state, curRepo, curWorkUnit)
+		return updateTmux(ctx, state, curRepo, curWorkUnit, true)
 	}
 
 	// Executed within tmux. Update the repo state.
@@ -112,7 +112,7 @@ func update(ctx context.Context) error {
 	return nil
 }
 
-func updateTmux(ctx context.Context, st *state.State, repo api.Repository, workUnit string) error {
+func updateTmux(ctx context.Context, st *state.State, repo api.Repository, workUnit string, endTrace bool) error {
 	sesh := st.Session(repo, workUnit)
 	if sesh == nil {
 		var err error
@@ -121,7 +121,12 @@ func updateTmux(ctx context.Context, st *state.State, repo api.Repository, workU
 			return err
 		}
 	}
-	return sesh.Server().AttachOrSwitch(ctx, sesh)
+	var err error
+	if endTrace {
+		// Attaching to a session hangs until the client is detached.
+		err = stopTrace()
+	}
+	return errors.Join(sesh.Server().AttachOrSwitch(ctx, sesh), err)
 }
 
 func updateTo(ctx context.Context, workUnitName string) error {
@@ -180,7 +185,7 @@ func updateTo(ctx context.Context, workUnitName string) error {
 		needsSwitch = true
 	}
 	if needsSwitch {
-		if err := updateTmux(ctx, st, repo, workUnitName); err != nil {
+		if err := updateTmux(ctx, st, repo, workUnitName, !hasCurrentServer); err != nil {
 			return err
 		}
 		update = true
