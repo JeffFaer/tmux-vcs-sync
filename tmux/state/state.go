@@ -208,10 +208,12 @@ func (st *State) RenameSession(ctx context.Context, repo api.Repository, old, ne
 		return fmt.Errorf("tmux session %q already exists", st.SessionName(newName))
 	}
 
-	if err := sesh.sesh.Rename(ctx, st.SessionName(newName)); err != nil {
+	n := st.SessionName(newName)
+	if err := sesh.sesh.Rename(ctx, n); err != nil {
 		return err
 	}
 
+	sesh.name = n
 	delete(st.sessionsByName, oldName)
 	st.sessionsByName[newName] = sesh
 	st.sessionsByID[sesh.sesh.ID()] = workUnit{repo, newName.WorkUnit}
