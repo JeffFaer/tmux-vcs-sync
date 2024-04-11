@@ -22,7 +22,7 @@ type State struct {
 	sessions tmux.Sessions
 
 	// tmux sessions in srv with their associated repositories.
-	sessionsByName map[WorkUnitName]tmux.Session
+	sessionsByName map[WorkUnitName]session
 	sessionsByID   map[string]workUnit
 	// An index of unqualified repo names that exist in sessions.
 	unqualifiedRepos map[string]int
@@ -43,7 +43,7 @@ func New(ctx context.Context, srv tmux.Server, vcs api.VersionControlSystems) (*
 	st := &State{
 		srv:              srv,
 		sessions:         sessions,
-		sessionsByName:   make(map[WorkUnitName]tmux.Session),
+		sessionsByName:   make(map[WorkUnitName]session),
 		sessionsByID:     make(map[string]workUnit),
 		unqualifiedRepos: make(map[string]int),
 		repos:            make(map[RepoName]api.Repository),
@@ -103,7 +103,7 @@ func New(ctx context.Context, srv tmux.Server, vcs api.VersionControlSystems) (*
 			}
 
 			parsed := ParseSessionName(repo, name)
-			st.sessionsByName[parsed] = sesh
+			st.sessionsByName[parsed] = session{sesh, name}
 			st.sessionsByID[sesh.ID()] = workUnit{repo, parsed.WorkUnit}
 			st.unqualifiedRepos[parsed.Repo]++
 			logger.Info("Found work unit in tmux session.", "name", parsed)
@@ -123,7 +123,11 @@ func (st *State) SessionName(n WorkUnitName) string {
 
 // Sessions returns all tmux sessions keyed by their work unit.
 func (st *State) Sessions() map[WorkUnitName]tmux.Session {
-	return maps.Clone(st.sessionsByName)
+	ret := make(map[WorkUnitName]tmux.Session, len(st.sessionsByName))
+	for k, v := range st.sessionsByName {
+		ret[k] = v.sesh
+	}
+	return ret
 }
 
 // UnknownSessions returns all tmux sessions that didn't appear to have a work
@@ -153,11 +157,11 @@ func (st *State) Repositories() map[RepoName]api.Repository {
 // Session determines if a tmux session for the given work unit exists.
 func (st *State) Session(repo api.Repository, workUnitName string) tmux.Session {
 	n := NewWorkUnitName(repo, workUnitName)
-	ret := st.sessionsByName[n]
-	if ret != nil {
-		slog.Info("Found existing tmux session for work unit.", "id", ret.ID(), "name", n)
+	ret, ok := st.sessionsByName[n]
+	if ok {
+		slog.Info("Found existing tmux session for work unit.", "id", ret.sesh.ID(), "name", n)
 	}
-	return ret
+	return ret.sesh
 }
 
 // NewSession creates a tmux session for the given work unit.
@@ -177,7 +181,7 @@ func (st *State) NewSession(ctx context.Context, repo api.Repository, workUnitNa
 		return nil, fmt.Errorf("failed to create tmux session %q: %w", n, err)
 	}
 
-	st.sessionsByName[name] = sesh
+	st.sessionsByName[name] = session{sesh, n}
 	st.sessionsByID[sesh.ID()] = workUnit{repo, name.WorkUnit}
 	st.unqualifiedRepos[name.Repo]++
 	st.repos[name.RepoName] = repo
@@ -204,13 +208,13 @@ func (st *State) RenameSession(ctx context.Context, repo api.Repository, old, ne
 		return fmt.Errorf("tmux session %q already exists", st.SessionName(newName))
 	}
 
-	if err := sesh.Rename(ctx, st.SessionName(newName)); err != nil {
+	if err := sesh.sesh.Rename(ctx, st.SessionName(newName)); err != nil {
 		return err
 	}
 
 	delete(st.sessionsByName, oldName)
 	st.sessionsByName[newName] = sesh
-	st.sessionsByID[sesh.ID()] = workUnit{repo, newName.WorkUnit}
+	st.sessionsByID[sesh.sesh.ID()] = workUnit{repo, newName.WorkUnit}
 
 	if err := st.updateSessionNames(ctx); err != nil {
 		slog.Warn("Failed to update tmux session names.", "error", err)
@@ -276,14 +280,10 @@ func (st *State) PruneSessions(ctx context.Context) error {
 func (st *State) updateSessionNames(ctx context.Context) error {
 	defer trace.StartRegion(ctx, "State.updateSessionNames()").End()
 
-	names, err := st.sessions.Property(ctx, tmux.SessionName)
-	if err != nil {
-		return fmt.Errorf("could not resolve session names: %w", err)
-	}
 	var errs []error
 	for k, sesh := range st.sessionsByName {
-		if got, want := names[sesh], st.SessionName(k); got != want {
-			if err := sesh.Rename(ctx, want); err != nil {
+		if got, want := sesh.name, st.SessionName(k); got != want {
+			if err := sesh.sesh.Rename(ctx, want); err != nil {
 				errs = append(errs, err)
 				continue
 			}
@@ -421,4 +421,9 @@ type workUnit struct {
 
 func (wu workUnit) name() WorkUnitName {
 	return NewWorkUnitName(wu.repo, wu.workUnitName)
+}
+
+type session struct {
+	sesh tmux.Session
+	name string
 }

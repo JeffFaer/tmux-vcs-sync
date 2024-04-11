@@ -175,6 +175,8 @@ var stopTrace = sync.OnceValue(func() error {
 		if err := f.Close(); err != nil {
 			return fmt.Errorf("closing trace file: %w", err)
 		}
+	} else {
+		slog.Debug("Not recording trace.", "duration", dur)
 	}
 	return nil
 })
