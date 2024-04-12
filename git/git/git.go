@@ -94,8 +94,8 @@ func (repo *gitRepo) discoverName(ctx context.Context) string {
 }
 
 var urlRegexes = []*regexp.Regexp{
-	regexp.MustCompile("^git@github.com:[^/]+/(.+).git$"),
-	regexp.MustCompile("^https://github.com/[^/]+/(.+).git$"),
+	regexp.MustCompile(`^git@github\.com:[^/]+/(.+).git$`),
+	regexp.MustCompile(`^https://github\.com/[^/]+/(.+).git$`),
 }
 
 func (repo *gitRepo) checkExplicitRepoName(ctx context.Context) string {
