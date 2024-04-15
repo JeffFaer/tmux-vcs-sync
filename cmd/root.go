@@ -100,7 +100,7 @@ func formatVersion() string {
 		s += "-dev"
 	}
 	if t := versioninfo.LastCommit; !t.IsZero() {
-		s += fmt.Sprintf(" (%s)", t.Format(time.RFC3339))
+		s += fmt.Sprintf(" (%s)", t.In(time.Local).Format(time.RFC3339))
 	}
 	return s
 }
