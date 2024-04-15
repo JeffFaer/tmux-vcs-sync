@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/JeffFaer/tmux-vcs-sync/api/config"
+	"github.com/carlmjohnson/versioninfo"
 	"github.com/kballard/go-shellquote"
 	"github.com/phsym/console-slog"
 	"github.com/spf13/cobra"
@@ -27,6 +28,8 @@ func Execute(ctx context.Context) error {
 }
 
 var (
+	version = formatVersion()
+
 	verbosity int
 	levels    = []slog.Level{
 		slog.LevelWarn,
@@ -48,6 +51,7 @@ var (
 var rootCmd = &cobra.Command{
 	Use:          "tmux-vcs-sync",
 	Short:        "Synchronize VCS state with tmux state.",
+	Version:      version,
 	SilenceUsage: true,
 	CompletionOptions: cobra.CompletionOptions{
 		HiddenDefaultCmd: true,
@@ -77,6 +81,28 @@ var rootCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func formatVersion() string {
+	var s string
+	if v := versioninfo.Version; v != "" && v != "unknown" && v != "(devel)" {
+		s = versioninfo.Version
+	}
+	if r := versioninfo.Revision; r != "" && r != "unknown" {
+		s = versioninfo.Revision
+		if len(s) > 7 {
+			s = s[:7]
+		}
+	}
+	if s == "" {
+		s = "devel"
+	} else if versioninfo.DirtyBuild {
+		s += "-dev"
+	}
+	if t := versioninfo.LastCommit; !t.IsZero() {
+		s += fmt.Sprintf(" (%s)", t.Format(time.RFC3339))
+	}
+	return s
 }
 
 func init() {
