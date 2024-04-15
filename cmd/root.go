@@ -28,7 +28,7 @@ func Execute(ctx context.Context) error {
 }
 
 var (
-	version = readVersion()
+	version = formatVersion()
 
 	verbosity int
 	levels    = []slog.Level{
@@ -83,15 +83,15 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func readVersion() string {
+func formatVersion() string {
 	var s string
 	if v := versioninfo.Version; v != "" && v != "unknown" && v != "(devel)" {
 		s = versioninfo.Version
 	}
 	if r := versioninfo.Revision; r != "" && r != "unknown" {
 		s = versioninfo.Revision
-		if len(s) > 7 {
-			s = s[:7]
+		if len(s) > 8 {
+			s = s[:8]
 		}
 	}
 	if s == "" {
