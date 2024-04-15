@@ -90,8 +90,8 @@ func formatVersion() string {
 	}
 	if r := versioninfo.Revision; r != "" && r != "unknown" {
 		s = versioninfo.Revision
-		if len(s) > 8 {
-			s = s[:8]
+		if len(s) > 7 {
+			s = s[:7]
 		}
 	}
 	if s == "" {
