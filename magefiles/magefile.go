@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/adrg/xdg"
 	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
 )
@@ -30,7 +31,7 @@ func (Build) Build() error {
 func (Build) Completion(shell string) error {
 	mg.Deps(Build.Build)
 	fmt.Printf("Generating %s completion...\n", shell)
-	return os.WriteFile(fmt.Sprintf("tvs_completion.%s", shell), []byte(fmt.Sprintf("source <(tmux-vcs-sync completion %q)", shell)), 0644)
+	return os.WriteFile(fmt.Sprintf("tmux-vcs-sync.%s", shell), []byte(fmt.Sprintf("source <(tmux-vcs-sync completion %q)", shell)), 0644)
 }
 
 func Test() error {
@@ -50,7 +51,7 @@ func (Install) Completion(shell string) error {
 		return err
 	}
 	fmt.Printf("Installing %s completion to %s...\n", shell, dir)
-	name := fmt.Sprintf("tvs_completion.%s", shell)
+	name := fmt.Sprintf("tmux-vcs-sync.%s", shell)
 	return sh.Run("cp", name, filepath.Join(dir, name))
 }
 
@@ -58,26 +59,18 @@ func determineCompletionDir(shell string) (string, error) {
 	if shell != "bash" {
 		return "", fmt.Errorf("the author only uses bash so they don't know where other shell completion files are supposed to go")
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
+	// /usr/share/bash-completion/bash_completion checks
+	// ${BASH_COMPLETION_USER_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion}/completions
+	dir := os.Getenv("BASH_COMPLETION_USER_DIR")
+	if dir == "" {
+		dir = filepath.Join(xdg.DataHome, "bash-completion")
+	}
+	dir = filepath.Join(dir, "completions")
+
+	if err := os.MkdirAll(dir, 0775); err != nil {
 		return "", err
 	}
-	for _, dir := range []string{
-		filepath.Join(home, "bash_completion.d"),
-		filepath.Join(home, "bashrc.d/bash_completion.d"),
-		"/etc/bash_completion.d",
-	} {
-		if stat, err := os.Stat(dir); err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return "", err
-		} else if stat.IsDir() {
-			return dir, nil
-		}
-	}
-
-	return "", fmt.Errorf("did not find any appropriate directory to install %s completions", shell)
+	return dir, nil
 }
 
 func Clean() {
