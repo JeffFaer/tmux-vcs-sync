@@ -22,6 +22,6 @@ go.work
 go.work.sum
 
 tmux-vcs-sync
-tvs_completion.*
+tmux-vcs-sync.*
 
 *.swp
