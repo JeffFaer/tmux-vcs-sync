@@ -159,6 +159,18 @@ func (repo *gitRepo) Sort(ctx context.Context, workUnits []string) error {
 		return nil
 	}
 
+	defaultBranch, err := repo.defaultBranchName(ctx)
+	if err != nil {
+		return err
+	}
+	isDefaultBranch := func(name string) bool { return name == defaultBranch }
+	if len(workUnits) == 2 && (isDefaultBranch(workUnits[0]) || isDefaultBranch(workUnits[1])) {
+		// We don't need to topologically sort anything since we know the default
+		// branch goes first.
+		slices.SortFunc(workUnits, morecmp.ComparingFunc(isDefaultBranch, morecmp.TrueFirst()))
+		return nil
+	}
+
 	branchesByHash, err := repo.keyBranchByHash(ctx, workUnits)
 	if err != nil {
 		return err
@@ -218,12 +230,7 @@ func (repo *gitRepo) Sort(ctx context.Context, workUnits []string) error {
 	}
 
 	// Move the default branch up top.
-	defaultBranch, err := repo.defaultBranchName(ctx)
-	if err != nil {
-		return err
-	}
-	isDefault := func(name string) bool { return name == defaultBranch }
-	slices.SortStableFunc(workUnits, morecmp.ComparingFunc(isDefault, morecmp.TrueFirst()))
+	slices.SortStableFunc(workUnits, morecmp.ComparingFunc(isDefaultBranch, morecmp.TrueFirst()))
 
 	return nil
 }
