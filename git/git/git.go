@@ -155,7 +155,7 @@ func (repo *gitRepo) List(ctx context.Context, prefix string) ([]string, error) 
 }
 
 func (repo *gitRepo) Sort(ctx context.Context, workUnits []string) error {
-	if len(workUnits) == 0 {
+	if len(workUnits) <= 1 {
 		return nil
 	}
 
