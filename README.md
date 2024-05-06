@@ -168,5 +168,7 @@ $ go work use . api git
     - cmd update.go no args
     - cmd update.go with args
     - cmd update.go completion suggestions
-  - Update should accept repo-qualified work unit names.
   - tmux hooks to automatically update session names when a session closes.
+  - Optimization ideas
+    - Add an existence filter to Sort for display_menu.
+    - Do blind Updates in update (will need to know whether anything changed).

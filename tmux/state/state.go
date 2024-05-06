@@ -144,7 +144,7 @@ func (st *State) WorkUnit(ctx context.Context, sesh tmux.Session) (api.Repositor
 	}
 	n, ok := st.sessionsByID[sesh.ID()]
 	if !ok {
-		return nil, "", fmt.Errorf("sesh does not have an associated work unit")
+		return nil, "", nil
 	}
 	return n.repo, n.workUnitName, nil
 }
@@ -299,18 +299,39 @@ func (st *State) updateSessionNames(ctx context.Context) error {
 // Returns an error if multiple api.Repositories claim that the given work unit
 // exists.
 // Returns nil, nil if no such api.Repository exists.
-func (st *State) MaybeFindRepository(ctx context.Context, workUnitName string) (api.Repository, error) {
-	repo, err := api.MaybeFindRepository(ctx, expmaps.Values(st.repos), func(repo api.Repository) (api.Repository, error) {
-		ok, err := repo.Exists(ctx, workUnitName)
-		if err != nil {
-			return nil, err
-		} else if ok {
-			return repo, nil
+func (st *State) MaybeFindRepository(ctx context.Context, n WorkUnitName) (api.Repository, error) {
+	var repos []api.Repository
+	switch {
+	case n.RepoName.VCS != "":
+		if n.RepoName.Repo == "" {
+			return nil, fmt.Errorf("WorkUnitName has VCS set, but not Repo: %v", n)
 		}
-		return nil, nil
+
+		repo, ok := st.repos[n.RepoName]
+		if !ok {
+			return nil, nil
+		}
+		repos = append(repos, repo)
+	case n.RepoName.Repo != "":
+		for m, repo := range st.repos {
+			if n.Repo == m.Repo {
+				repos = append(repos, repo)
+			}
+		}
+	default:
+		repos = expmaps.Values(st.Repositories())
+	}
+
+	repo, err := api.MaybeFindRepository(ctx, repos, func(repo api.Repository) (api.Repository, error) {
+		if ok, err := repo.Exists(ctx, n.WorkUnit); err != nil {
+			return nil, err
+		} else if !ok {
+			return nil, nil
+		}
+		return repo, nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("work unit %q: %w", workUnitName, err)
+		return nil, fmt.Errorf("work unit %v: %w", n, err)
 	}
 	return repo, nil
 }
@@ -323,6 +344,17 @@ func NewRepoName(repo api.Repository) RepoName {
 	return RepoName{VCS: repo.VCS().Name(), Repo: repo.Name()}
 }
 
+func (n RepoName) Zero() bool {
+	return n == RepoName{}
+}
+
+func (n RepoName) String() string {
+	if n.VCS != "" {
+		return fmt.Sprintf("%s>%s", n.VCS, n.Repo)
+	}
+	return n.Repo
+}
+
 func (n RepoName) LogValue() slog.Value {
 	return slog.GroupValue(slog.String("vcs", n.VCS), slog.String("repo", n.Repo))
 }
@@ -333,28 +365,43 @@ type WorkUnitName struct {
 }
 
 func ParseSessionName(repo api.Repository, tmuxSessionName string) WorkUnitName {
-	n := WorkUnitName{RepoName: NewRepoName(repo)}
-
-	sp := strings.SplitN(tmuxSessionName, ">", 3)
-	switch len(sp) {
-	case 1:
-		n.WorkUnit = sp[0]
-	case 2:
-		if n.Repo != sp[0] {
-			slog.Warn("Session name does not agree with repository.", "session_name", tmuxSessionName, "repo", n.Repo)
+	n := ParseSessionNameWithoutKnownRepository(tmuxSessionName)
+	if m := NewRepoName(repo); n.RepoName != m {
+		if (n.RepoName.VCS != "" && n.RepoName.VCS != m.VCS) || (n.RepoName.Repo != "" && n.RepoName.Repo != m.Repo) {
+			slog.Warn("Session name does not agree with repository.", "session_name", tmuxSessionName, "repo", m)
 		}
-		n.WorkUnit = sp[1]
-	default:
-		if n.VCS != sp[1] || n.Repo != sp[1] {
-			slog.Warn("Session name does not agree with repository.", "session_name", tmuxSessionName, "vcs", n.VCS, "repo", n.Repo)
-		}
-		n.WorkUnit = sp[2]
+		n.RepoName = m
 	}
 	return n
 }
 
+func ParseSessionNameWithoutKnownRepository(tmuxSessionName string) WorkUnitName {
+	sp := strings.SplitN(tmuxSessionName, ">", 3)
+	switch len(sp) {
+	case 1:
+		return WorkUnitName{WorkUnit: sp[0]}
+	case 2:
+		return WorkUnitName{RepoName: RepoName{Repo: sp[0]}, WorkUnit: sp[1]}
+	default:
+		return WorkUnitName{RepoName: RepoName{VCS: sp[0], Repo: sp[1]}, WorkUnit: sp[2]}
+	}
+}
+
 func NewWorkUnitName(repo api.Repository, workUnitName string) WorkUnitName {
 	return WorkUnitName{NewRepoName(repo), workUnitName}
+}
+
+func (n WorkUnitName) Zero() bool {
+	return n == WorkUnitName{}
+}
+
+func (n WorkUnitName) String() string {
+	if n.VCS != "" {
+		return fmt.Sprintf("%s>%s>%s", n.VCS, n.Repo, n.WorkUnit)
+	} else if n.Repo != "" {
+		return n.RepoString()
+	}
+	return n.WorkUnitString()
 }
 
 func (n WorkUnitName) RepoString() string {
