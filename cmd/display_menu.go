@@ -15,6 +15,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var keyShortcuts = strings.Split("0123456789wertyuiopasdfghlzxcvbnm", "")
+
 func init() {
 	rootCmd.AddCommand(displayMenuCommand)
 }
@@ -133,7 +135,7 @@ func createMenu(ctx context.Context, curSesh tmux.Session, vcs api.VersionContro
 	slices.SortStableFunc(orderedSessions, morecmp.ComparingFunc(hasCurrentSession, morecmp.TrueFirst()))
 
 	var menu []tmux.MenuElement
-	keys := strings.Split("0123456789wertyuiopasdfghjklzxcvbnm", "")
+	keys := keyShortcuts
 	for i, group := range orderedSessions {
 		if i > 0 {
 			menu = append(menu, tmux.MenuSpacer{})
