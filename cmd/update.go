@@ -12,7 +12,6 @@ import (
 	"github.com/JeffFaer/tmux-vcs-sync/api"
 	"github.com/JeffFaer/tmux-vcs-sync/tmux"
 	"github.com/JeffFaer/tmux-vcs-sync/tmux/state"
-	"github.com/kballard/go-shellquote"
 	"github.com/spf13/cobra"
 )
 
@@ -33,27 +32,7 @@ var updateCommand = &cobra.Command{
 3. If given a work unit name, it will attempt to find that work unit in any of the repositories currently active in tmux and update both tmux and that VCS to point at the given work unit. Note: This means that you can update to a work unit that exists in a different repository.`,
 	Args: cobra.RangeArgs(0, 1),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		var quoted bool
-		if strings.HasPrefix(toComplete, `"`) {
-			quoted = true
-			toComplete = toComplete[1:]
-		} else {
-			unescaped, err := shellquote.Split(toComplete)
-			if err != nil {
-				slog.Warn("Couldn't unescape input.", "input", toComplete, "error", err)
-			} else {
-				toComplete = strings.Join(unescaped, " ")
-			}
-		}
-		suggestions := suggestWorkUnitNames(cmd.Context(), state.ParseSessionNameWithoutKnownRepository(toComplete))
-		for i, s := range suggestions {
-			if quoted {
-				suggestions[i] = `"` + s + `"`
-			} else {
-				suggestions[i] = shellquote.Join(s)
-			}
-		}
-		return suggestions, 0
+		return suggestWorkUnitNames(cmd.Context(), state.ParseSessionNameWithoutKnownRepository(toComplete)), 0
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
