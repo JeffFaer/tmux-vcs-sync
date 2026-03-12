@@ -1,6 +1,6 @@
 module github.com/JeffFaer/tmux-vcs-sync
 
-go 1.22.0
+go 1.23
 
 require (
 	github.com/JeffFaer/go-stdlib-ext v0.1.1
