@@ -55,16 +55,17 @@ func (srv *Server) NewSession(_ context.Context, opts tmux.NewSessionOptions) (t
 	id := fmt.Sprintf("%d#%d", srv.pid, idNum)
 	srv.nextSessionID++
 
-	name := strconv.Itoa(idNum)
-	if n := opts.Name; n != "" {
-		name = n
+	name := opts.Name
+	if name == "" {
+		name = strconv.Itoa(idNum)
 	}
 
-	dir, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("Getwd: %w", err)
-	}
-	if d := opts.StartDir; d != "" {
+	dir := opts.StartDir
+	if dir == "" {
+		d, err := os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("Getwd: %w", err)
+		}
 		dir = d
 	}
 
