@@ -95,18 +95,26 @@ func update(ctx context.Context) error {
 		return updateTmux(ctx, state, curRepo, curWorkUnit, true)
 	}
 
-	// Executed within tmux. Update the repo state.
-	nameProp, err := curSesh.Property(ctx, tmux.SessionName)
+	// Executed within tmux. Make sure this session has someone attached.
+	props, err := curSesh.Properties(ctx, tmux.SessionAttached, tmux.SessionName)
 	if err != nil {
 		return err
 	}
-	name := tmux.PropertyValue(tmux.SessionName, nameProp)
+	attached := tmux.SinglePropertyValue(tmux.SessionAttached, props)
+	if attached == 0 {
+		slog.Info("Current session has no attachees. Is this a race condition?")
+		os.Exit(1)
+	}
+
+	// Update the repo state.
+	name := tmux.SinglePropertyValue(tmux.SessionName, props)
 	parsed := state.ParseSessionName(curRepo, name)
+	logger := slog.With("current", curWorkUnit, "want", parsed.WorkUnit)
 	if curWorkUnit != parsed.WorkUnit {
-		slog.Info("Updating repository.", "current", curWorkUnit, "want", parsed.WorkUnit)
+		logger.Info("Updating repository.")
 		return curRepo.Update(ctx, parsed.WorkUnit)
 	}
-	slog.Info("No update needed.")
+	logger.Info("No update needed.")
 	if failNoop {
 		os.Exit(1)
 	}
