@@ -96,10 +96,11 @@ func update(ctx context.Context) error {
 	}
 
 	// Executed within tmux. Update the repo state.
-	name, err := curSesh.Property(ctx, tmux.SessionName)
+	nameProp, err := curSesh.Property(ctx, tmux.SessionName)
 	if err != nil {
 		return err
 	}
+	name := tmux.PropertyValue(tmux.SessionName, nameProp)
 	parsed := state.ParseSessionName(curRepo, name)
 	if curWorkUnit != parsed.WorkUnit {
 		slog.Info("Updating repository.", "current", curWorkUnit, "want", parsed.WorkUnit)

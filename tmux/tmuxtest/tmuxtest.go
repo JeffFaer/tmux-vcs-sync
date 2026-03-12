@@ -72,13 +72,9 @@ func (srv *Server) NewSession(_ context.Context, opts tmux.NewSessionOptions) (t
 		srv.sessions = make(map[string]*Session)
 	}
 	srv.sessions[id] = &Session{
-		srv: srv,
-		id:  id,
-		props: map[tmux.SessionProperty]string{
-			tmux.SessionID:   id,
-			tmux.SessionName: name,
-			tmux.SessionPath: dir,
-		},
+		srv:   srv,
+		id:    id,
+		props: tmux.CreateSessionPropertyValues(tmux.SessionID.Value(id), tmux.SessionName.Value(name), tmux.SessionPath.Value(dir)),
 	}
 	return srv.sessions[id], nil
 }
@@ -116,20 +112,20 @@ func (s Sessions) Sessions() []tmux.Session {
 	return ret
 }
 
-func (s Sessions) Property(ctx context.Context, prop tmux.SessionProperty) (map[tmux.Session]string, error) {
+func (s Sessions) Property(ctx context.Context, prop tmux.SessionPropertyName) (map[tmux.Session]tmux.SessionPropertyValue, error) {
 	vals, err := s.Properties(ctx, prop)
 	if err != nil {
 		return nil, err
 	}
-	ret := make(map[tmux.Session]string, len(vals))
+	ret := make(map[tmux.Session]tmux.SessionPropertyValue, len(vals))
 	for sesh, props := range vals {
 		ret[sesh] = props[prop]
 	}
 	return ret, nil
 }
 
-func (s Sessions) Properties(ctx context.Context, props ...tmux.SessionProperty) (map[tmux.Session]map[tmux.SessionProperty]string, error) {
-	ret := make(map[tmux.Session]map[tmux.SessionProperty]string, len(s))
+func (s Sessions) Properties(ctx context.Context, props ...tmux.SessionPropertyName) (map[tmux.Session]tmux.SessionPropertyValues, error) {
+	ret := make(map[tmux.Session]tmux.SessionPropertyValues, len(s))
 	for _, sesh := range s {
 		var err error
 		ret[sesh], err = sesh.Properties(ctx, props...)
@@ -144,7 +140,7 @@ type Session struct {
 	srv *Server
 	id  string
 
-	props map[tmux.SessionProperty]string
+	props tmux.SessionPropertyValues
 	dead  bool
 }
 
@@ -153,38 +149,38 @@ var _ tmux.Session = (*Session)(nil)
 func (s *Session) Server() tmux.Server { return s.srv }
 func (s *Session) ID() string          { return s.id }
 
-func (s *Session) Property(ctx context.Context, prop tmux.SessionProperty) (string, error) {
+func (s *Session) Property(ctx context.Context, prop tmux.SessionPropertyName) (tmux.SessionPropertyValue, error) {
 	vals, err := s.Properties(ctx, prop)
 	if err != nil {
-		return "", err
+		return tmux.SessionPropertyValue{}, err
 	}
 	return vals[prop], nil
 }
 
-func (s *Session) Properties(_ context.Context, props ...tmux.SessionProperty) (map[tmux.SessionProperty]string, error) {
+func (s *Session) Properties(_ context.Context, props ...tmux.SessionPropertyName) (tmux.SessionPropertyValues, error) {
 	if s.dead {
 		return nil, fmt.Errorf("session %q was killed", s.id)
 	}
 
-	ret := make(map[tmux.SessionProperty]string)
+	ret := make(tmux.SessionPropertyValues, len(props))
 	for _, prop := range props {
 		ret[prop] = s.props[prop]
 	}
 	return ret, nil
 }
 
-func (s *Session) setProperty(k tmux.SessionProperty, v string) {
+func (s *Session) setProperty(v tmux.SessionPropertyValue) {
 	if s.props == nil {
-		s.props = make(map[tmux.SessionProperty]string)
+		s.props = make(tmux.SessionPropertyValues)
 	}
-	s.props[k] = v
+	s.props.Set(v)
 }
 
 func (s *Session) Rename(_ context.Context, n string) error {
 	if s.dead {
 		return fmt.Errorf("session %q was killed", s.id)
 	}
-	s.setProperty(tmux.SessionName, n)
+	s.setProperty(tmux.SessionName.Value(n))
 	return nil
 }
 
