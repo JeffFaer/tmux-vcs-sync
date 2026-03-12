@@ -593,8 +593,8 @@ func simplifyTmuxState(ctx context.Context, srv tmux.Server) simplifiedTmuxState
 	for sesh, props := range must(must(srv.ListSessions(ctx)).Properties(ctx, tmux.SessionName, tmux.SessionPath)) {
 		ret.Sessions = append(ret.Sessions, simplifiedSessionState{
 			ID:   sesh.ID(),
-			Name: props[tmux.SessionName],
-			Dir:  props[tmux.SessionPath],
+			Name: tmux.SinglePropertyValue(tmux.SessionName, props),
+			Dir:  tmux.SinglePropertyValue(tmux.SessionPath, props),
 		})
 	}
 	return ret
