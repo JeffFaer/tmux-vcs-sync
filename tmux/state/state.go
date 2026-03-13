@@ -59,7 +59,8 @@ func New(ctx context.Context, srv tmux.Server, vcs api.VersionControlSystems) (*
 		// This tool makes tmux sessions with the repository's root dir as the
 		// session path. There's a pretty good chance we'll have multiple sessions
 		// with the same exact session path.
-		sessionsByPath[props[tmux.SessionPath]] = append(sessionsByPath[props[tmux.SessionPath]], sesh)
+		path := tmux.SinglePropertyValue(tmux.SessionPath, props)
+		sessionsByPath[path] = append(sessionsByPath[path], sesh)
 	}
 
 	type result struct {
@@ -94,7 +95,7 @@ func New(ctx context.Context, srv tmux.Server, vcs api.VersionControlSystems) (*
 			st.repos[NewRepoName(repo)] = repo
 		}
 		for _, sesh := range sessions {
-			name := props[sesh][tmux.SessionName]
+			name := tmux.SinglePropertyValue(tmux.SessionName, props[sesh])
 			logger := slog.With("id", sesh.ID(), "session_name", name)
 			if repo == nil {
 				st.unknownSessions[name] = sesh

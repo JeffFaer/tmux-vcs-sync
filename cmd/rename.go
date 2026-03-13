@@ -37,10 +37,11 @@ func rename(ctx context.Context, newName string) error {
 	if err != nil {
 		return err
 	}
-	oldName, err := sesh.Property(ctx, tmux.SessionName)
+	oldNameProp, err := sesh.Property(ctx, tmux.SessionName)
 	if err != nil {
 		return err
 	}
+	oldName := tmux.PropertyValue(tmux.SessionName, oldNameProp)
 	if state.Session(repo, newName) == nil {
 		// If the tmux session doesn't yet exist, try renaming the work unit first.
 		// Otherwise, if the tmux session does exist, we know that state.RenameSession will
