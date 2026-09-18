@@ -190,8 +190,8 @@ func createTraceFile(filename string) (*os.File, error) {
 var stopTrace = sync.OnceValue(func() error {
 	traceTask.End()
 	if doTrace {
+		slog.Warn("Recording trace.", "file", traceFile.Name())
 		trace.Stop()
-		slog.Warn("Trace recorded.", "file", traceFile.Name())
 		if err := traceFile.Close(); err != nil {
 			return err
 		}
@@ -201,11 +201,12 @@ var stopTrace = sync.OnceValue(func() error {
 		if err != nil {
 			return err
 		}
+
+		slog.Warn("Recording trace due to slow execution.", "duration", dur, "file", f.Name())
+
 		if _, err := flightRecorder.WriteTo(f); err != nil {
 			return fmt.Errorf("writing trace file: %w", err)
 		}
-		slog.Warn("Recording trace due to slow execution.", "duration", dur, "file", f.Name())
-
 		if err := flightRecorder.Stop(); err != nil {
 			return fmt.Errorf("flightRecorder.Stop(): %w", err)
 		}
