@@ -58,7 +58,11 @@ func (git git) Repository(ctx context.Context, dir string) (api.Repository, erro
 }
 
 func (git git) rootDir(ctx context.Context, cwd string) (string, error) {
-	return git.Command(ctx, "-C", cwd, "rev-parse", "--show-toplevel").RunStdout()
+	cdup, err := git.Command(ctx, "-C", cwd, "rev-parse", "--show-cdup").RunStdout()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cwd, cdup), nil
 }
 
 type gitRepo struct {
