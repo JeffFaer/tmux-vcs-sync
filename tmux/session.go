@@ -30,19 +30,19 @@ func (s sessions) Sessions() []Session {
 	return ret
 }
 
-func (s sessions) Property(ctx context.Context, prop SessionProperty) (map[Session]string, error) {
+func (s sessions) Property(ctx context.Context, prop SessionPropertyName) (map[Session]SessionPropertyValue, error) {
 	vals, err := s.Properties(ctx, prop)
 	if err != nil {
 		return nil, err
 	}
-	ret := make(map[Session]string, len(vals))
+	ret := make(map[Session]SessionPropertyValue, len(vals))
 	for sesh, props := range vals {
 		ret[sesh] = props[prop]
 	}
 	return ret, nil
 }
 
-func (s sessions) Properties(ctx context.Context, props ...SessionProperty) (map[Session]map[SessionProperty]string, error) {
+func (s sessions) Properties(ctx context.Context, props ...SessionPropertyName) (map[Session]SessionPropertyValues, error) {
 	if len(s) == 0 {
 		return nil, nil
 	}
@@ -50,7 +50,7 @@ func (s sessions) Properties(ctx context.Context, props ...SessionProperty) (map
 	propStrings := make([]string, len(props)+1)
 	propStrings[0] = string(SessionID)
 	for i, prop := range props {
-		propStrings[i+1] = string(prop)
+		propStrings[i+1] = prop.String()
 	}
 
 	format := strings.Join(propStrings, "\n")
@@ -72,14 +72,14 @@ func (s sessions) Properties(ctx context.Context, props ...SessionProperty) (map
 		return nil, err
 	}
 
-	ret := make(map[Session]map[SessionProperty]string, len(s))
+	ret := make(map[Session]SessionPropertyValues, len(s))
 	lines := strings.Split(stdout, "\n")
 	for i := 0; i < len(lines); i++ {
 		id := lines[i]
-		vals := make(map[SessionProperty]string, len(props))
+		vals := make(SessionPropertyValues, len(props))
 		for _, prop := range props {
 			i++
-			vals[prop] = lines[i]
+			vals[prop] = SessionPropertyValue{name: prop, val: lines[i]}
 		}
 		ret[seshByID[id]] = vals
 	}
@@ -121,16 +121,16 @@ func (s *session) ID() string {
 	return s.id
 }
 
-func (s *session) Property(ctx context.Context, prop SessionProperty) (string, error) {
+func (s *session) Property(ctx context.Context, prop SessionPropertyName) (SessionPropertyValue, error) {
 	props, err := s.Properties(ctx, prop)
 	if err != nil {
-		return "", err
+		return SessionPropertyValue{}, err
 	}
 	return props[prop], nil
 }
 
 // Properties fetches properties about a session.
-func (s *session) Properties(ctx context.Context, props ...SessionProperty) (map[SessionProperty]string, error) {
+func (s *session) Properties(ctx context.Context, props ...SessionPropertyName) (SessionPropertyValues, error) {
 	vals, err := sessions{s}.Properties(ctx, props...)
 	if err != nil {
 		return nil, err

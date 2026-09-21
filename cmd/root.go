@@ -48,40 +48,59 @@ var (
 	flightRecorder *exptrace.FlightRecorder
 )
 
-var rootCmd = &cobra.Command{
-	Use:          "tmux-vcs-sync",
-	Short:        "Synchronize VCS state with tmux state.",
-	Version:      version,
-	SilenceUsage: true,
-	CompletionOptions: cobra.CompletionOptions{
-		HiddenDefaultCmd: true,
-	},
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if cobraBuiltin(cmd) {
-			return nil
-		}
+var rootCmd = func() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:          "tmux-vcs-sync",
+		Short:        "Synchronize VCS state with tmux state.",
+		Version:      version,
+		SilenceUsage: true,
+		CompletionOptions: cobra.CompletionOptions{
+			HiddenDefaultCmd: true,
+		},
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if cobraBuiltin(cmd) {
+				return nil
+			}
 
-		configureLogging()
-		ctx, err := startTrace(cmd, args)
-		if err != nil {
-			return err
-		}
-		cmd.SetContext(ctx)
-		if err := loadPlugins(ctx); err != nil {
-			return err
-		}
-		return nil
-	},
-	PersistentPostRunE: func(cmd *cobra.Command, _ []string) error {
-		if cobraBuiltin(cmd) {
+			configureLogging()
+			ctx, err := startTrace(cmd, args)
+			if err != nil {
+				return err
+			}
+			cmd.SetContext(ctx)
+			if err := loadPlugins(ctx); err != nil {
+				return err
+			}
 			return nil
-		}
-		if err := stopTrace(); err != nil {
-			return err
-		}
-		return nil
-	},
-}
+		},
+		PersistentPostRunE: func(cmd *cobra.Command, _ []string) error {
+			if cobraBuiltin(cmd) {
+				return nil
+			}
+			if err := stopTrace(); err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+
+	cmd.PersistentFlags().CountVarP(&verbosity, "verbose", "v", "Log more verbosely.")
+	cmd.PersistentFlags().BoolVar(&doTrace, "trace", false, "Whether to record an execution trace or not.")
+	if err := cmd.PersistentFlags().MarkHidden("trace"); err != nil {
+		log.Fatal(err)
+	}
+
+	cmd.InitDefaultCompletionCmd("completion")
+	comp, _, err := cmd.Find([]string{"completion", "bash"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	comp.RunE = func(c *cobra.Command, _ []string) error {
+		return GenBashCompletionV2(c, c.OutOrStdout(), !c.CompletionOptions.DisableDescriptions)
+	}
+
+	return cmd
+}()
 
 func formatVersion() string {
 	var s string
@@ -103,14 +122,6 @@ func formatVersion() string {
 		s += fmt.Sprintf(" (%s)", t.In(time.Local).Format(time.RFC3339))
 	}
 	return s
-}
-
-func init() {
-	rootCmd.PersistentFlags().CountVarP(&verbosity, "verbose", "v", "Log more verbosely.")
-	rootCmd.PersistentFlags().BoolVar(&doTrace, "trace", false, "Whether to record an execution trace or not.")
-	if err := rootCmd.PersistentFlags().MarkHidden("trace"); err != nil {
-		log.Fatal(err)
-	}
 }
 
 func cobraBuiltin(cmd *cobra.Command) bool {
