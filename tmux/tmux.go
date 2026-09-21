@@ -110,6 +110,7 @@ const (
 	SessionID       SessionProperty[string] = "#{session_id}"
 	SessionName     SessionProperty[string] = "#{session_name}"
 	SessionPath     SessionProperty[string] = "#{session_path}"
+	SessionAttached SessionProperty[int]    = "#{session_attached}"
 )
 
 func (_ SessionProperty[T]) iAmSessionPropertyName() {}
@@ -119,6 +120,8 @@ func (prop SessionProperty[T]) Value(t T) SessionPropertyValue {
 	switch u := any(t).(type) {
 	case string:
 		s = u
+	case int:
+		s = strconv.Itoa(u)
 	default:
 		panic(fmt.Errorf("unsupported property type %T", u))
 	}
@@ -162,6 +165,13 @@ func PropertyValue[T any](property SessionProperty[T], val SessionPropertyValue)
 	switch any((*T)(nil)).(type) {
 	case *string:
 		ret = s
+	case *int:
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			var zero T
+			panic(fmt.Errorf("property %q expects type %T, got %q: %w", property, zero, s, err))
+		}
+		ret = i
 	default:
 		var zero T
 		panic(fmt.Errorf("unsupported property type %T", zero))
