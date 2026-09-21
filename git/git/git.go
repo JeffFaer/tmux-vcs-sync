@@ -155,8 +155,14 @@ func (repo *gitRepo) List(ctx context.Context, prefix string) ([]string, error) 
 }
 
 func (repo *gitRepo) Sort(ctx context.Context, workUnits []string) error {
-	if len(workUnits) <= 1 {
+	if len(workUnits) == 0 {
 		return nil
+	}
+	if len(workUnits) == 1 {
+		if repo.branchExists(ctx, workUnits[0]) {
+			return nil
+		}
+		return fmt.Errorf("work unit does not exist: %s", workUnits[0])
 	}
 
 	branchesByHash, err := repo.keyBranchByHash(ctx, workUnits)
