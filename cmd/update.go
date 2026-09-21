@@ -233,7 +233,8 @@ func updateTo(ctx context.Context, sessionName state.WorkUnitName) error {
 func findRepository(ctx context.Context, vcs api.VersionControlSystems, st *state.State, n state.WorkUnitName) (api.Repository, error) {
 	var err1, err2 error
 	if n.RepoName.Zero() {
-		cur, err1 := existsInCurrentRepo(ctx, vcs, n.WorkUnit)
+		var cur api.Repository
+		cur, err1 = existsInCurrentRepo(ctx, vcs, n.WorkUnit)
 		if err1 == nil && cur != nil {
 			return cur, nil
 		}
