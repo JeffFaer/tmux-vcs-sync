@@ -14,7 +14,6 @@ import (
 	"github.com/JeffFaer/go-stdlib-ext/morecmp"
 	"github.com/JeffFaer/tmux-vcs-sync/api"
 	"github.com/JeffFaer/tmux-vcs-sync/tmux"
-	expmaps "golang.org/x/exp/maps"
 )
 
 type State struct {
@@ -320,7 +319,7 @@ func (st *State) MaybeFindRepository(ctx context.Context, n WorkUnitName) (api.R
 			}
 		}
 	default:
-		repos = expmaps.Values(st.Repositories())
+		repos = slices.Collect(maps.Values(st.Repositories()))
 	}
 
 	repo, err := api.MaybeFindRepository(ctx, repos, func(repo api.Repository) (api.Repository, error) {
