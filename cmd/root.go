@@ -96,7 +96,7 @@ var rootCmd = func() *cobra.Command {
 		log.Fatal(err)
 	}
 	comp.RunE = func(c *cobra.Command, _ []string) error {
-		return GenBashCompletionV2(c, c.OutOrStdout(), !c.CompletionOptions.DisableDescriptions)
+		return GenBashCompletionV2(c.Root(), c.Root().OutOrStdout(), !c.Root().CompletionOptions.DisableDescriptions)
 	}
 
 	return cmd
