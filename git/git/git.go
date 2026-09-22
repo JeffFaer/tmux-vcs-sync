@@ -159,10 +159,35 @@ func (repo *gitRepo) Sort(ctx context.Context, workUnits []string) error {
 		return nil
 	}
 	if len(workUnits) == 1 {
-		if repo.branchExists(ctx, workUnits[0]) {
+		if !repo.branchExists(ctx, workUnits[0]) {
+			return fmt.Errorf("work unit does not exist: %s", workUnits[0])
+		}
+		return nil
+	}
+
+	defaultBranchName, err := repo.defaultBranchName(ctx)
+	if err != nil {
+		return err
+	}
+	isDefaultBranch := func(name string) bool { return name == defaultBranchName }
+	if len(workUnits) == 2 {
+		// We might not need to topologically sort anything since we know the
+		// default branch goes first.
+		var nonDefaultBranch string
+		if isDefaultBranch(workUnits[0]) {
+			nonDefaultBranch = workUnits[1]
+		} else if isDefaultBranch(workUnits[1]) {
+			nonDefaultBranch = workUnits[0]
+		}
+
+		if nonDefaultBranch != "" {
+			if !repo.branchExists(ctx, nonDefaultBranch) {
+				return fmt.Errorf("work unit does not exist: %s", nonDefaultBranch)
+			}
+			workUnits[0] = defaultBranchName
+			workUnits[1] = nonDefaultBranch
 			return nil
 		}
-		return fmt.Errorf("work unit does not exist: %s", workUnits[0])
 	}
 
 	branchesByHash, err := repo.keyBranchByHash(ctx, workUnits)
@@ -224,12 +249,7 @@ func (repo *gitRepo) Sort(ctx context.Context, workUnits []string) error {
 	}
 
 	// Move the default branch up top.
-	defaultBranch, err := repo.defaultBranchName(ctx)
-	if err != nil {
-		return err
-	}
-	isDefault := func(name string) bool { return name == defaultBranch }
-	slices.SortStableFunc(workUnits, morecmp.ComparingFunc(isDefault, morecmp.TrueFirst()))
+	slices.SortStableFunc(workUnits, morecmp.ComparingFunc(isDefaultBranch, morecmp.TrueFirst()))
 
 	return nil
 }
