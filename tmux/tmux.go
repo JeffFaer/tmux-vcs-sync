@@ -3,10 +3,13 @@ package tmux
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/JeffFaer/go-stdlib-ext/morecmp"
 	"github.com/JeffFaer/tmux-vcs-sync/api/exec"
 )
 
@@ -72,10 +75,10 @@ type Sessions interface {
 
 	// Property retrieves the value of the given property key for all of these
 	// Sessions.
-	Property(context.Context, SessionProperty) (map[Session]string, error)
+	Property(context.Context, SessionPropertyName) (map[Session]SessionPropertyValue, error)
 	// Properties retrieves the values of all the given property keys for all of
 	// these Sessions.
-	Properties(context.Context, ...SessionProperty) (map[Session]map[SessionProperty]string, error)
+	Properties(context.Context, ...SessionPropertyName) (map[Session]SessionPropertyValues, error)
 }
 
 type Session interface {
@@ -85,9 +88,9 @@ type Session interface {
 	ID() string
 
 	// Property retrieves the value of the given property key.
-	Property(context.Context, SessionProperty) (string, error)
+	Property(context.Context, SessionPropertyName) (SessionPropertyValue, error)
 	// Properties retrieves the values of all the given property keys.
-	Properties(context.Context, ...SessionProperty) (map[SessionProperty]string, error)
+	Properties(context.Context, ...SessionPropertyName) (SessionPropertyValues, error)
 
 	// Rename this tmux session to have the given name.
 	Rename(context.Context, string) error
@@ -96,13 +99,84 @@ type Session interface {
 	Kill(context.Context) error
 }
 
-type SessionProperty string
+// TODO: jfaer - This indirection is ripe for a refactor after go gets generic methods.
+type SessionPropertyName interface {
+	String() string
+	iAmSessionPropertyName()
+}
+type SessionProperty[T any] string
 
 const (
-	SessionID   SessionProperty = "#{session_id}"
-	SessionName SessionProperty = "#{session_name}"
-	SessionPath SessionProperty = "#{session_path}"
+	SessionID       SessionProperty[string] = "#{session_id}"
+	SessionName     SessionProperty[string] = "#{session_name}"
+	SessionPath     SessionProperty[string] = "#{session_path}"
 )
+
+func (_ SessionProperty[T]) iAmSessionPropertyName() {}
+
+func (prop SessionProperty[T]) Value(t T) SessionPropertyValue {
+	var s string
+	switch u := any(t).(type) {
+	case string:
+		s = u
+	default:
+		panic(fmt.Errorf("unsupported property type %T", u))
+	}
+
+	return SessionPropertyValue{
+		name: SessionPropertyName(prop),
+		val:  s,
+	}
+}
+
+func (prop SessionProperty[T]) String() string {
+	return string(prop)
+}
+
+type SessionPropertyValue struct {
+	name SessionPropertyName
+	val  string
+}
+
+type SessionPropertyValues map[SessionPropertyName]SessionPropertyValue
+
+func CreateSessionPropertyValues(props ...SessionPropertyValue) SessionPropertyValues {
+	ret := make(SessionPropertyValues, len(props))
+	for _, prop := range props {
+		ret.Set(prop)
+	}
+	return ret
+}
+
+func (vals SessionPropertyValues) Set(val SessionPropertyValue) {
+	vals[val.name] = val
+}
+
+func PropertyValue[T any](property SessionProperty[T], val SessionPropertyValue) T {
+	if val.name != SessionPropertyName(property) {
+		panic(fmt.Errorf("PropertyValue called with the wrong SessionProperty: got %q want %q", property, val.name))
+	}
+
+	s := val.val
+	var ret any
+	switch any((*T)(nil)).(type) {
+	case *string:
+		ret = s
+	default:
+		var zero T
+		panic(fmt.Errorf("unsupported property type %T", zero))
+	}
+	return ret.(T)
+}
+
+func SinglePropertyValue[T any](property SessionProperty[T], vals SessionPropertyValues) T {
+	val, ok := vals[SessionPropertyName(property)]
+	if !ok {
+		panic(fmt.Errorf("SinglePropertyValue called with an unknown SessionProperty: got %q want any of %q", property, slices.SortedFunc(maps.Keys(vals), morecmp.Comparing(SessionPropertyName.String))))
+	}
+
+	return PropertyValue(property, val)
+}
 
 type Client interface {
 	// Property retrieves the value of the given property key.
