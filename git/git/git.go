@@ -112,7 +112,7 @@ func (repo *gitRepo) checkExplicitRepoName(ctx context.Context) string {
 }
 
 func (repo *gitRepo) parseOriginURL(ctx context.Context) string {
-	url, stderr, err := repo.Command(ctx, "remote", "get-url", "origin").RunOutput()
+	originURL, stderr, err := repo.Command(ctx, "remote", "get-url", "origin").RunOutput()
 	if err != nil {
 		if strings.Contains(stderr, "No such remote") {
 			return ""
@@ -120,6 +120,22 @@ func (repo *gitRepo) parseOriginURL(ctx context.Context) string {
 		fmt.Fprintln(os.Stderr, stderr)
 		return ""
 	}
+	originName := extractName(originURL)
+	if originName == "" {
+		return ""
+	}
+
+	upstreamURL, _, err := repo.Command(ctx, "remote", "get-url", "upstream").RunOutput()
+	if err == nil {
+		upstreamName := extractName(upstreamURL)
+		if upstreamName != "" && strings.Contains(originName, upstreamName) {
+			return upstreamName
+		}
+	}
+	return originName
+}
+
+func extractName(url string) string {
 	for _, regex := range urlRegexes {
 		m := regex.FindStringSubmatch(url)
 		if m != nil && m[1] != "" {
