@@ -94,12 +94,13 @@ func (repo *gitRepo) discoverName(ctx context.Context) string {
 			return n
 		}
 	}
+	slog.Info("Couldn't discover repo name. Defaulting to directory name.")
 	return filepath.Base(repo.rootDir)
 }
 
 var urlRegexes = []*regexp.Regexp{
-	regexp.MustCompile(`^git@github\.com:[^/]+/(.+).git$`),
-	regexp.MustCompile(`^https://github\.com/[^/]+/(.+).git$`),
+	regexp.MustCompile(`^git@github\.com:[^/]+/(.+)\.git$`),
+	regexp.MustCompile(`^https://github\.com/[^/]+/(.+?)(\.git)?$`),
 }
 
 func (repo *gitRepo) checkExplicitRepoName(ctx context.Context) string {
